@@ -171,6 +171,151 @@ impl Default for CtlLaceConfig {
     }
 }
 
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct CtlPixtxMatrixConfig {
+    pub size: u32,
+    pub version: u8,
+    pub _pad0: [u8; 3],
+    pub pre_offsets: [f64; 3],
+    pub post_offsets: [f64; 3],
+    pub matrix: [[f64; 3]; 3],
+}
+
+impl Default for CtlPixtxMatrixConfig {
+    fn default() -> Self {
+        Self {
+            size: std::mem::size_of::<Self>() as u32,
+            version: 0,
+            _pad0: [0; 3],
+            pre_offsets: [0.0; 3],
+            post_offsets: [0.0; 3],
+            matrix: [
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, 1.0],
+            ],
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct CtlPixtxBlockConfig {
+    pub size: u32,
+    pub version: u8,
+    pub _pad0: [u8; 3],
+    pub block_id: u32,
+    pub block_type: u32,
+    pub matrix_config: CtlPixtxMatrixConfig,
+}
+
+impl Default for CtlPixtxBlockConfig {
+    fn default() -> Self {
+        Self {
+            size: std::mem::size_of::<Self>() as u32,
+            version: 0,
+            _pad0: [0; 3],
+            block_id: 0,
+            block_type: 0,
+            matrix_config: CtlPixtxMatrixConfig::default(),
+        }
+    }
+}
+
+#[repr(C)]
+pub struct CtlPixtxPipeGetConfig {
+    pub size: u32,
+    pub version: u8,
+    pub _pad0: [u8; 3],
+    pub oper_type: u32,
+    pub pixel_formats_pad: [u8; 244],
+    pub num_blocks: u32,
+    pub _pad1: u32,
+    pub p_block_configs: *mut CtlPixtxBlockConfig,
+}
+
+impl Default for CtlPixtxPipeGetConfig {
+    fn default() -> Self {
+        Self {
+            size: std::mem::size_of::<Self>() as u32,
+            version: 0,
+            _pad0: [0; 3],
+            oper_type: 0,
+            pixel_formats_pad: [0; 244],
+            num_blocks: 0,
+            _pad1: 0,
+            p_block_configs: std::ptr::null_mut(),
+        }
+    }
+}
+
+#[repr(C)]
+pub struct CtlPixtxPipeSetConfig {
+    pub size: u32,
+    pub version: u8,
+    pub _pad0: [u8; 3],
+    pub oper_type: u32,
+    pub flags: u32,
+    pub num_blocks: u32,
+    pub _pad1: u32,
+    pub p_block_configs: *mut CtlPixtxBlockConfig,
+}
+
+impl Default for CtlPixtxPipeSetConfig {
+    fn default() -> Self {
+        Self {
+            size: std::mem::size_of::<Self>() as u32,
+            version: 0,
+            _pad0: [0; 3],
+            oper_type: 0,
+            flags: 0,
+            num_blocks: 0,
+            _pad1: 0,
+            p_block_configs: std::ptr::null_mut(),
+        }
+    }
+}
+
+pub const CTL_PIXTX_BLOCK_TYPE_3X3_MATRIX: u32 = 3;
+pub const CTL_PIXTX_BLOCK_TYPE_3X3_MATRIX_AND_OFFSETS: u32 = 4;
+pub const CTL_PIXTX_CONFIG_QUERY_TYPE_CAPABILITY: u32 = 0;
+pub const CTL_PIXTX_CONFIG_QUERY_TYPE_CURRENT: u32 = 1;
+pub const CTL_PIXTX_CONFIG_OPER_TYPE_RESTORE_DEFAULT: u32 = 1;
+pub const CTL_PIXTX_CONFIG_OPER_TYPE_SET_CUSTOM: u32 = 2;
+
+/// Builds a 3x3 Color Space Conversion (CSC) matrix for Saturation (0.0..=100.0, neutral 50.0)
+/// and Hue (-180.0..=180.0, neutral 0.0) using BT.709 luma weights.
+pub fn build_csc_matrix(saturation_pct: f32, hue_deg: f32) -> [[f64; 3]; 3] {
+    let s = (saturation_pct.clamp(0.0, 100.0) as f64) / 50.0;
+    let theta = (hue_deg.clamp(-180.0, 180.0) as f64).to_radians();
+    let cos_h = theta.cos() * s;
+    let sin_h = theta.sin() * s;
+
+    // BT.709 luma coefficients
+    const WR: f64 = 0.2126;
+    const WG: f64 = 0.7152;
+    const WB: f64 = 0.0722;
+
+    [
+        [
+            WR + (1.0 - WR) * cos_h - WR * sin_h,
+            WG - WG * cos_h - WG * sin_h,
+            WB - WB * cos_h + (1.0 - WB) * sin_h,
+        ],
+        [
+            WR - WR * cos_h + 0.143 * sin_h,
+            WG + (1.0 - WG) * cos_h + 0.140 * sin_h,
+            WB - WB * cos_h - 0.283 * sin_h,
+        ],
+        [
+            WR - WR * cos_h - (1.0 - WR) * sin_h,
+            WG - WG * cos_h + WG * sin_h,
+            WB + (1.0 - WB) * cos_h + WB * sin_h,
+        ],
+    ]
+}
+
 pub type FnCtlInit = unsafe extern "C" fn(*mut CtlInitArgs, *mut CtlApiHandle) -> CtlResult;
 pub type FnCtlClose = unsafe extern "C" fn(CtlApiHandle) -> CtlResult;
 pub type FnCtlEnumerateDevices =
@@ -192,6 +337,10 @@ pub type FnCtlGetLaceConfig =
     unsafe extern "C" fn(CtlDisplayOutputHandle, *mut CtlLaceConfig) -> CtlResult;
 pub type FnCtlSetLaceConfig =
     unsafe extern "C" fn(CtlDisplayOutputHandle, *mut CtlLaceConfig) -> CtlResult;
+pub type FnCtlPixelTransformationGetConfig =
+    unsafe extern "C" fn(CtlDisplayOutputHandle, *mut CtlPixtxPipeGetConfig) -> CtlResult;
+pub type FnCtlPixelTransformationSetConfig =
+    unsafe extern "C" fn(CtlDisplayOutputHandle, *mut CtlPixtxPipeSetConfig) -> CtlResult;
 
 pub fn format_igcl_driver_version(v: u64) -> String {
     let part1 = (v >> 48) & 0xFFFF;
@@ -210,7 +359,22 @@ mod tests {
         assert_eq!(std::mem::size_of::<CtlInitArgs>(), 36);
         assert_eq!(std::mem::size_of::<CtlGetBrightness>(), 16);
         assert_eq!(std::mem::size_of::<CtlSetBrightness>(), 16);
+        assert_eq!(std::mem::size_of::<CtlPixtxMatrixConfig>(), 128);
+        assert_eq!(std::mem::size_of::<CtlPixtxBlockConfig>(), 144);
+        assert_eq!(std::mem::size_of::<CtlPixtxPipeGetConfig>(), 272);
+        assert_eq!(std::mem::size_of::<CtlPixtxPipeSetConfig>(), 32);
         assert!(std::mem::size_of::<CtlDeviceAdapterProperties>() >= 260);
+    }
+
+    #[test]
+    fn csc_matrix_is_identity_at_neutral_saturation_and_hue() {
+        let m = build_csc_matrix(50.0, 0.0);
+        for r in 0..3 {
+            for c in 0..3 {
+                let expected = if r == c { 1.0 } else { 0.0 };
+                assert!((m[r][c] - expected).abs() < 1e-6);
+            }
+        }
     }
 
     #[test]

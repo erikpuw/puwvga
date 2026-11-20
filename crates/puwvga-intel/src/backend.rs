@@ -16,6 +16,8 @@ struct IntelRuntime {
     fn_enum_displays: FnCtlEnumerateDisplayOutputs,
     fn_get_lace: Option<FnCtlGetLaceConfig>,
     fn_set_lace: Option<FnCtlSetLaceConfig>,
+    fn_pixtx_get: Option<FnCtlPixelTransformationGetConfig>,
+    fn_pixtx_set: Option<FnCtlPixelTransformationSetConfig>,
     device_handles: Vec<CtlDeviceAdapterHandle>,
 }
 
@@ -55,6 +57,8 @@ impl IntelBackend {
             fn_enum_displays,
             fn_get_lace,
             fn_set_lace,
+            fn_pixtx_get,
+            fn_pixtx_set,
         ) = unsafe {
             let init: FnCtlInit = *lib
                 .get(b"ctlInit\0")
@@ -81,8 +85,24 @@ impl IntelBackend {
                 .get::<FnCtlSetLaceConfig>(b"ctlSetLACEConfig\0")
                 .ok()
                 .map(|s| *s);
+            let pixtx_get = lib
+                .get::<FnCtlPixelTransformationGetConfig>(b"ctlPixelTransformationGetConfig\0")
+                .ok()
+                .map(|s| *s);
+            let pixtx_set = lib
+                .get::<FnCtlPixelTransformationSetConfig>(b"ctlPixelTransformationSetConfig\0")
+                .ok()
+                .map(|s| *s);
             (
-                init, close, enum_dev, dev_props, enum_disp, get_lace, set_lace,
+                init,
+                close,
+                enum_dev,
+                dev_props,
+                enum_disp,
+                get_lace,
+                set_lace,
+                pixtx_get,
+                pixtx_set,
             )
         };
 
@@ -113,6 +133,8 @@ impl IntelBackend {
                 fn_enum_displays,
                 fn_get_lace,
                 fn_set_lace,
+                fn_pixtx_get,
+                fn_pixtx_set,
                 device_handles: handles,
             }),
             settings_cache: Mutex::new(default_intel_values()),
@@ -240,6 +262,44 @@ impl GpuBackend for IntelBackend {
                     ..Default::default()
                 };
                 let _ = unsafe { set_lace(disp, &mut lace) };
+            }
+            if let (Some(pixtx_get), Some(pixtx_set)) = (rt.fn_pixtx_get, rt.fn_pixtx_set) {
+                let mut pipe_get = CtlPixtxPipeGetConfig {
+                    oper_type: CTL_PIXTX_CONFIG_QUERY_TYPE_CAPABILITY,
+                    ..Default::default()
+                };
+                let status_count = unsafe { pixtx_get(disp, &mut pipe_get) };
+                if status_count == CTL_RESULT_SUCCESS && pipe_get.num_blocks > 0 && pipe_get.num_blocks <= 32 {
+                    let mut blocks = vec![CtlPixtxBlockConfig::default(); pipe_get.num_blocks as usize];
+                    pipe_get.p_block_configs = blocks.as_mut_ptr();
+                    if unsafe { pixtx_get(disp, &mut pipe_get) } == CTL_RESULT_SUCCESS {
+                        if let Some(csc_blk) = blocks.iter().find(|b| {
+                            b.block_type == CTL_PIXTX_BLOCK_TYPE_3X3_MATRIX_AND_OFFSETS
+                                || b.block_type == CTL_PIXTX_BLOCK_TYPE_3X3_MATRIX
+                        }) {
+                            let mut set_blk = CtlPixtxBlockConfig {
+                                block_id: csc_blk.block_id,
+                                block_type: csc_blk.block_type,
+                                matrix_config: CtlPixtxMatrixConfig {
+                                    matrix: build_csc_matrix(
+                                        settings.vibrance_or_saturation,
+                                        settings.hue,
+                                    ),
+                                    ..Default::default()
+                                },
+                                ..Default::default()
+                            };
+                            let mut pipe_set = CtlPixtxPipeSetConfig {
+                                oper_type: CTL_PIXTX_CONFIG_OPER_TYPE_SET_CUSTOM,
+                                flags: 0,
+                                num_blocks: 1,
+                                p_block_configs: &mut set_blk,
+                                ..Default::default()
+                            };
+                            let _ = unsafe { pixtx_set(disp, &mut pipe_set) };
+                        }
+                    }
+                }
             }
         }
         self.color_cache
