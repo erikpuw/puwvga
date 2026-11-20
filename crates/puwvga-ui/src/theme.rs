@@ -107,6 +107,10 @@ pub fn apply_fluent_visuals(ctx: &egui::Context, p: Palette) {
     style.spacing.combo_width = 195.0;
     style.spacing.slider_width = 165.0;
     style.spacing.interact_size.y = 28.0;
+    style.spacing.scroll.floating = false;
+    style.spacing.scroll.bar_width = 6.0;
+    style.spacing.scroll.bar_inner_margin = 4.0;
+    style.spacing.scroll.bar_outer_margin = 4.0;
 
     let mut visuals = if p.dark {
         Visuals::dark()

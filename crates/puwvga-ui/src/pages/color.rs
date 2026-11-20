@@ -314,8 +314,14 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
         },
         None,
         |ui| {
+            let depth_label = match color.wire_format.depth {
+                ColorDepth::Bpc6 => "6 bpc",
+                ColorDepth::Bpc8 => "8 bpc",
+                ColorDepth::Bpc10 => "10 bpc",
+                ColorDepth::Bpc12 => "12 bpc",
+            };
             egui::ComboBox::from_id_salt("wf_depth")
-                .selected_text(format!("{:?}", color.wire_format.depth))
+                .selected_text(depth_label)
                 .show_ui(ui, |ui| {
                     ui.selectable_value(&mut color.wire_format.depth, ColorDepth::Bpc8, "8 bpc");
                     ui.selectable_value(&mut color.wire_format.depth, ColorDepth::Bpc10, "10 bpc");
@@ -335,8 +341,14 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
         },
         None,
         |ui| {
+            let fmt_label = match color.wire_format.format {
+                OutputColorFormat::Rgb => "RGB",
+                OutputColorFormat::YCbCr444 => "YCbCr444",
+                OutputColorFormat::YCbCr422 => "YCbCr422",
+                OutputColorFormat::YCbCr420 => "YCbCr420",
+            };
             egui::ComboBox::from_id_salt("wf_fmt")
-                .selected_text(format!("{:?}", color.wire_format.format))
+                .selected_text(fmt_label)
                 .show_ui(ui, |ui| {
                     ui.selectable_value(
                         &mut color.wire_format.format,

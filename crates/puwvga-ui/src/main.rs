@@ -249,53 +249,61 @@ impl eframe::App for PuwvgaApp {
                 });
             });
 
-        // Main Scrollable Area
+        // Main Scrollable Area — zero outer margin on CentralPanel so the scrollbar docks to the window edge,
+        // with generous inner padding inside the ScrollArea so cards never touch the scrollbar.
         egui::CentralPanel::default()
-            .frame(
-                Frame::new()
-                    .fill(p.bg_window)
-                    .inner_margin(Margin::symmetric(26, 20)),
-            )
+            .frame(Frame::new().fill(p.bg_window).inner_margin(Margin::ZERO))
             .show(ctx, |ui| {
-                if self.state.needs_admin_banner {
-                    Frame::new()
-                        .fill(p.accent_soft)
-                        .stroke(Stroke::new(1.0_f32, p.warn))
-                        .corner_radius(CornerRadius::same(8))
-                        .inner_margin(Margin::symmetric(12, 8))
-                        .show(ui, |ui| {
-                            ui.set_width(ui.available_width());
-                            ui.horizontal(|ui| {
-                                ui.label(
-                                    RichText::new("Driver yêu cầu quyền Administrator cho thao tác vừa rồi.")
-                                        .size(12.5)
-                                        .color(p.text_primary),
-                                );
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        if ui.button(tr(lang, TextKey::RelaunchAdmin)).clicked() {
-                                            if relaunch_as_administrator() {
-                                                ctx.send_viewport_cmd(
-                                                    egui::ViewportCommand::Close,
-                                                );
-                                            }
-                                        }
-                                    },
-                                );
-                            });
-                        });
-                    ui.add_space(10.0);
-                }
-
                 egui::ScrollArea::vertical()
                     .auto_shrink([false; 2])
-                    .show(ui, |ui| match self.state.page {
-                        Page::Dashboard => pages::dashboard::render(ui, &mut self.state, p),
-                        Page::Color => pages::color::render(ui, &mut self.state, p),
-                        Page::Display => pages::display::render(ui, &mut self.state, p),
-                        Page::Graphics => pages::graphics::render(ui, &mut self.state, p),
-                        Page::Settings => pages::settings::render(ui, &mut self.state, p),
+                    .show(ui, |ui| {
+                        Frame::new()
+                            .inner_margin(Margin {
+                                left: 26,
+                                right: 24,
+                                top: 20,
+                                bottom: 24,
+                            })
+                            .show(ui, |ui| {
+                                if self.state.needs_admin_banner {
+                                    Frame::new()
+                                        .fill(p.accent_soft)
+                                        .stroke(Stroke::new(1.0_f32, p.warn))
+                                        .corner_radius(CornerRadius::same(8))
+                                        .inner_margin(Margin::symmetric(12, 8))
+                                        .show(ui, |ui| {
+                                            ui.set_width(ui.available_width());
+                                            ui.horizontal(|ui| {
+                                                ui.label(
+                                                    RichText::new("Driver yêu cầu quyền Administrator cho thao tác vừa rồi.")
+                                                        .size(12.5)
+                                                        .color(p.text_primary),
+                                                );
+                                                ui.with_layout(
+                                                    egui::Layout::right_to_left(egui::Align::Center),
+                                                    |ui| {
+                                                        if ui.button(tr(lang, TextKey::RelaunchAdmin)).clicked() {
+                                                            if relaunch_as_administrator() {
+                                                                ctx.send_viewport_cmd(
+                                                                    egui::ViewportCommand::Close,
+                                                                );
+                                                            }
+                                                        }
+                                                    },
+                                                );
+                                            });
+                                        });
+                                    ui.add_space(10.0);
+                                }
+
+                                match self.state.page {
+                                    Page::Dashboard => pages::dashboard::render(ui, &mut self.state, p),
+                                    Page::Color => pages::color::render(ui, &mut self.state, p),
+                                    Page::Display => pages::display::render(ui, &mut self.state, p),
+                                    Page::Graphics => pages::graphics::render(ui, &mut self.state, p),
+                                    Page::Settings => pages::settings::render(ui, &mut self.state, p),
+                                }
+                            });
                     });
 
                 if let Some((msg, _)) = &self.state.toast {
