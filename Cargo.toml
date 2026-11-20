@@ -1,0 +1,42 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/puwvga-core",
+    "crates/puwvga-win32",
+    "crates/puwvga-intel",
+    "crates/puwvga-nvidia",
+    "crates/puwvga-amd",
+    "crates/puwvga-ui",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+authors = ["puwvga"]
+
+[workspace.dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+libloading = "0.8"
+eframe = { version = "0.31", default-features = false, features = ["glow", "default_fonts"] }
+egui = "0.31"
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_Gdi",
+    "Win32_Devices_Display",
+    "Win32_Graphics_Dwm",
+    "Win32_System_Registry",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Shell",
+] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

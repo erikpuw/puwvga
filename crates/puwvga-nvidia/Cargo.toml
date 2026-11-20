@@ -1,0 +1,9 @@
+[package]
+name = "puwvga-nvidia"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+puwvga-core = { path = "../puwvga-core" }
+libloading.workspace = true

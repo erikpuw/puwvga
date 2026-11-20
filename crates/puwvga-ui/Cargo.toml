@@ -1,0 +1,18 @@
+[package]
+name = "puwvga-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "puwvga"
+path = "src/main.rs"
+
+[dependencies]
+puwvga-core = { path = "../puwvga-core" }
+puwvga-win32 = { path = "../puwvga-win32" }
+puwvga-intel = { path = "../puwvga-intel" }
+puwvga-nvidia = { path = "../puwvga-nvidia" }
+puwvga-amd = { path = "../puwvga-amd" }
+eframe.workspace = true
+egui.workspace = true
