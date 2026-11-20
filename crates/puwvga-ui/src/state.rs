@@ -2,14 +2,14 @@ use puwvga_amd::AmdBackend;
 use puwvga_core::{
     BackendError, ColorSettings, DisplayModeSettings, DisplayOutputInfo, GpuAdapterInfo,
     GpuBackend, GpuCapabilities, GpuId, GpuRole, Language, MuxMode, PresetBundle, PresetStore,
-    ScalingMode, SettingDescriptor, SettingScope, SpanningConfig, SpanningLayout,
+    ScalingMode, SettingDescriptor, SettingScope, SettingValue, SpanningConfig, SpanningLayout,
     ThemePreference, Vendor,
 };
 use puwvga_intel::IntelBackend;
 use puwvga_nvidia::NvidiaBackend;
 use puwvga_win32::{
-    apply_display_mode, enumerate_active_displays, enumerate_dxgi_adapters, is_windows_dark_mode,
-    list_supported_modes, read_gamma_ramp_estimate,
+    apply_display_mode, apply_gamma_ramp, enumerate_active_displays, enumerate_dxgi_adapters,
+    is_windows_dark_mode, list_supported_modes, read_gamma_ramp_estimate,
 };
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -65,12 +65,14 @@ pub struct AppState {
     pub spanning_by_gpu: BTreeMap<GpuId, SpanningConfig>,
     pub mux_mode: MuxMode,
 
-    // Vendor-native 3D & Video descriptors for selected GPU
+    // Vendor-native 3D & Video descriptors for selected GPU + persistent overrides
     pub gfx_scope: SettingScope,
     pub per_app_name: String,
     pub show_legacy_nv: bool,
     pub settings_3d: Vec<SettingDescriptor>,
     pub settings_video: Vec<SettingDescriptor>,
+    pub saved_3d: BTreeMap<String, SettingValue>,
+    pub saved_video: BTreeMap<String, SettingValue>,
 
     // Safety & feedback
     pub pending_revert: Option<PendingDisplayRevert>,
@@ -104,7 +106,7 @@ impl AppState {
             backends: BTreeMap::new(),
             color_by_display: loaded.display_colors,
             modes_by_device: BTreeMap::new(),
-            display_settings_by_id: BTreeMap::new(),
+            display_settings_by_id: loaded.display_modes,
             spanning_by_gpu: BTreeMap::new(),
             mux_mode: MuxMode::HybridOptimus,
             gfx_scope: SettingScope::Global,
@@ -112,6 +114,8 @@ impl AppState {
             show_legacy_nv: false,
             settings_3d: Vec::new(),
             settings_video: Vec::new(),
+            saved_3d: loaded.settings_3d,
+            saved_video: loaded.settings_video,
             pending_revert: None,
             toast: None,
             needs_admin_banner: false,
@@ -200,7 +204,8 @@ impl AppState {
         }
 
         // Populate modes & initial color/display states
-        for disp in &self.displays {
+        let displays_snapshot = self.displays.clone();
+        for disp in &displays_snapshot {
             let modes = list_supported_modes(&disp.device_name);
             self.modes_by_device.insert(disp.device_name.clone(), modes);
             self.display_settings_by_id
@@ -214,7 +219,29 @@ impl AppState {
                     sharpness: Some(20),
                 });
 
-            if !self.color_by_display.contains_key(&disp.id) {
+            // Check if we already have saved color settings (by disp.id or by stable device_name fallback)
+            let saved_color = self
+                .color_by_display
+                .get(&disp.id)
+                .cloned()
+                .or_else(|| self.color_by_display.get(&disp.device_name).cloned());
+
+            if let Some(color) = saved_color {
+                self.color_by_display.insert(disp.id.clone(), color.clone());
+                self.color_by_display
+                    .insert(disp.device_name.clone(), color.clone());
+                let _ = apply_gamma_ramp(
+                    &disp.device_name,
+                    color.brightness,
+                    color.contrast,
+                    color.gamma,
+                );
+                if let Some(gpu) = self.owner_gpu_for_display(disp).cloned() {
+                    if let Some(backend) = self.backends.get(&gpu.vendor) {
+                        let _ = backend.set_color(&gpu.id, &disp.id, &color);
+                    }
+                }
+            } else {
                 let mut initial = if let Some(gpu) = self.owner_gpu_for_display(disp) {
                     self.backends
                         .get(&gpu.vendor)
@@ -223,13 +250,15 @@ impl AppState {
                 } else {
                     ColorSettings::default()
                 };
-                // Read live hardware LUT from Win32 GetDeviceGammaRamp so Brightness/Contrast/Gamma match current screen
                 if let Some((b, c, g)) = read_gamma_ramp_estimate(&disp.device_name) {
                     initial.brightness = b;
                     initial.contrast = c;
                     initial.gamma = g;
                 }
-                self.color_by_display.insert(disp.id.clone(), initial);
+                self.color_by_display
+                    .insert(disp.id.clone(), initial.clone());
+                self.color_by_display
+                    .insert(disp.device_name.clone(), initial);
             }
         }
 
@@ -295,10 +324,20 @@ impl AppState {
             return;
         };
         if let Some(backend) = self.backends.get(&gpu.vendor) {
-            if let Ok(s3d) = backend.list_3d_settings(&gpu.id, &self.gfx_scope) {
+            if let Ok(mut s3d) = backend.list_3d_settings(&gpu.id, &self.gfx_scope) {
+                for item in &mut s3d {
+                    if let Some(saved_val) = self.saved_3d.get(&item.id) {
+                        item.value = saved_val.clone();
+                    }
+                }
                 self.settings_3d = s3d;
             }
-            if let Ok(svid) = backend.list_video_settings(&gpu.id) {
+            if let Ok(mut svid) = backend.list_video_settings(&gpu.id) {
+                for item in &mut svid {
+                    if let Some(saved_val) = self.saved_video.get(&item.id) {
+                        item.value = saved_val.clone();
+                    }
+                }
                 self.settings_video = svid;
             }
         }
@@ -353,7 +392,10 @@ impl AppState {
                     kind: RevertKind::Spanning { gpu_id },
                 });
             }
-            self.handle_backend_result(res, "Đã bật ghép màn hình (tự hoàn tác sau 15s nếu chưa xác nhận)");
+            self.handle_backend_result(
+                res,
+                "Đã bật ghép màn hình (tự hoàn tác sau 15s nếu chưa xác nhận)",
+            );
         }
     }
 
@@ -406,12 +448,25 @@ impl AppState {
         });
     }
 
-    pub fn save_preset(&mut self) {
-        let bundle = PresetBundle {
+    fn current_preset_bundle(&self) -> PresetBundle {
+        PresetBundle {
             language: self.language,
             theme: self.theme,
             display_colors: self.color_by_display.clone(),
-        };
+            display_modes: self.display_settings_by_id.clone(),
+            settings_3d: self.saved_3d.clone(),
+            settings_video: self.saved_video.clone(),
+        }
+    }
+
+    /// Automatically persists current settings to `puwvga.presets.json` whenever any control changes.
+    pub fn auto_save_preset(&self) {
+        let bundle = self.current_preset_bundle();
+        let _ = PresetStore::save(&self.preset_path, &bundle);
+    }
+
+    pub fn save_preset(&mut self) {
+        let bundle = self.current_preset_bundle();
         match PresetStore::save(&self.preset_path, &bundle) {
             Ok(()) => self.set_toast(format!("Đã lưu {}", self.preset_path.display())),
             Err(e) => self.set_toast(format!("Lỗi lưu preset: {e}")),
@@ -423,16 +478,31 @@ impl AppState {
             Ok(bundle) => {
                 self.language = bundle.language;
                 self.theme = bundle.theme;
+                self.saved_3d = bundle.settings_3d;
+                self.saved_video = bundle.settings_video;
+                self.display_settings_by_id = bundle.display_modes;
                 for (disp_id, color) in bundle.display_colors {
-                    if let Some(disp) = self.displays.iter().find(|d| d.id == disp_id).cloned() {
+                    if let Some(disp) = self
+                        .displays
+                        .iter()
+                        .find(|d| d.id == disp_id || d.device_name == disp_id)
+                        .cloned()
+                    {
+                        let _ = apply_gamma_ramp(
+                            &disp.device_name,
+                            color.brightness,
+                            color.contrast,
+                            color.gamma,
+                        );
                         if let Some(gpu) = self.owner_gpu_for_display(&disp).cloned() {
                             if let Some(backend) = self.backends.get(&gpu.vendor) {
-                                let _ = backend.set_color(&gpu.id, &disp_id, &color);
+                                let _ = backend.set_color(&gpu.id, &disp.id, &color);
                             }
                         }
                     }
                     self.color_by_display.insert(disp_id, color);
                 }
+                self.reload_active_graphics_settings();
                 self.set_toast(match self.language {
                     Language::Vi => "Đã áp dụng Preset từ file JSON",
                     Language::En => "Applied Preset from JSON file",

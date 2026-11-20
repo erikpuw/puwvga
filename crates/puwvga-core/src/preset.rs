@@ -1,5 +1,5 @@
 use crate::i18n::Language;
-use crate::model::ColorSettings;
+use crate::model::{ColorSettings, DisplayModeSettings, SettingValue};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
@@ -18,9 +18,18 @@ pub enum ThemePreference {
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct PresetBundle {
+    #[serde(default)]
     pub language: Language,
+    #[serde(default)]
     pub theme: ThemePreference,
+    #[serde(default)]
     pub display_colors: BTreeMap<String, ColorSettings>,
+    #[serde(default)]
+    pub display_modes: BTreeMap<String, DisplayModeSettings>,
+    #[serde(default)]
+    pub settings_3d: BTreeMap<String, SettingValue>,
+    #[serde(default)]
+    pub settings_video: BTreeMap<String, SettingValue>,
 }
 
 pub struct PresetStore;
@@ -104,16 +113,20 @@ mod tests {
         let mut bundle = PresetBundle {
             language: Language::En,
             theme: ThemePreference::Dark,
-            display_colors: BTreeMap::new(),
+            ..PresetBundle::default()
         };
         bundle.display_colors.insert(
             "DISPLAY1".into(),
             ColorSettings {
-                brightness: 62.0,
-                vibrance_or_saturation: 70.0,
+                brightness: 45.0,
+                contrast: 55.0,
+                vibrance_or_saturation: 56.0,
                 ..ColorSettings::default()
             },
         );
+        bundle
+            .settings_3d
+            .insert("intel.sharpness".into(), SettingValue::Float(35.0));
 
         PresetStore::save(&path, &bundle).unwrap();
         let loaded = PresetStore::load(&path).unwrap();

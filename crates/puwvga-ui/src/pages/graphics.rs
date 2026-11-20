@@ -145,6 +145,9 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
             if ui.button(tr(lang, TextKey::ResetDefaults)).clicked() {
                 if let Some(b) = state.backends.get(&gpu.vendor).cloned() {
                     let res = b.restore_3d_defaults(&gpu.id, &state.gfx_scope);
+                    state.saved_3d.clear();
+                    state.saved_video.clear();
+                    state.auto_save_preset();
                     state.handle_backend_result(res, "Đã khôi phục mặc định 3D");
                     state.reload_active_graphics_settings();
                 }
@@ -188,15 +191,18 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
         }
     }
 
+    let mut any_saved = false;
     for (id, val) in updates_3d {
+        state.saved_3d.insert(id.clone(), val.clone());
+        any_saved = true;
         if let Some(b) = state.backends.get(&gpu.vendor).cloned() {
             let res = b.apply_3d_setting(&gpu.id, &state.gfx_scope, &id, &val);
             state.handle_backend_result(
                 res,
                 if is_vi {
-                    "Đã áp dụng trực tiếp vào driver"
+                    "Đã áp dụng & lưu cấu hình 3D"
                 } else {
-                    "Applied directly to driver"
+                    "Applied & saved 3D setting"
                 },
             );
         }
@@ -221,17 +227,22 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
         }
     }
     for (id, val) in updates_vid {
+        state.saved_video.insert(id.clone(), val.clone());
+        any_saved = true;
         if let Some(b) = state.backends.get(&gpu.vendor).cloned() {
             let res = b.apply_video_setting(&gpu.id, &id, &val);
             state.handle_backend_result(
                 res,
                 if is_vi {
-                    "Đã áp dụng cấu hình Video"
+                    "Đã áp dụng & lưu cấu hình Video"
                 } else {
-                    "Applied video setting"
+                    "Applied & saved video setting"
                 },
             );
         }
+    }
+    if any_saved {
+        state.auto_save_preset();
     }
 }
 

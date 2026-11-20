@@ -33,6 +33,49 @@ pub fn build_gamma_ramp(brightness: f32, contrast: f32, gamma: f32) -> [u16; 768
     ramp
 }
 
+/// Decodes (brightness, contrast, gamma) from a 3x256 hardware gamma ramp using interior points
+/// (i = 64 and i = 191, whose midpoint is x = 0.5) so endpoint clipping at 0 and 255 does not skew results.
+pub fn decode_gamma_ramp(ramp: &[u16; 768]) -> (f32, f32, f32) {
+    let x1 = 64.0_f32 / 255.0;
+    let x3 = 191.0_f32 / 255.0;
+    let y1 = (ramp[256 + 64] as f32) / 65535.0;
+    let y3 = (ramp[256 + 191] as f32) / 65535.0;
+
+    let mut best = (50.0_f32, 50.0_f32, 1.0_f32);
+    let mut best_err = f64::MAX;
+    let sample_indices = [48usize, 64, 96, 128, 160, 191, 207];
+
+    for step_idx in 10..=50 {
+        let g = (step_idx as f32) * 0.05;
+        let l1 = y1.max(1e-4).powf(g);
+        let l3 = y3.max(1e-4).powf(g);
+
+        let c_scale = ((l3 - l1) / (x3 - x1)).clamp(0.2, 2.0);
+        // Because (64 + 191) / 255 = 1.0, (x1 + x3) / 2 == 0.5 exactly!
+        let l_mid = 0.5 * (l1 + l3);
+        let b_offset = (l_mid - 0.5).clamp(-0.5, 0.5);
+
+        let brightness = (50.0 + b_offset * 100.0).clamp(0.0, 100.0).round();
+        let contrast = (c_scale * 50.0).clamp(10.0, 100.0).round();
+
+        let candidate = build_gamma_ramp(brightness, contrast, g);
+        let err: f64 = sample_indices
+            .iter()
+            .map(|&idx| {
+                let d = (ramp[256 + idx] as f64) - (candidate[256 + idx] as f64);
+                d * d
+            })
+            .sum();
+
+        if err < best_err {
+            best_err = err;
+            best = (brightness, contrast, (g * 20.0).round() / 20.0);
+        }
+    }
+
+    best
+}
+
 /// Applies Brightness, Contrast, and Gamma immediately to the physical display hardware LUT
 /// via Win32 `SetDeviceGammaRamp` (works instantaneously on Intel, NVIDIA, and AMD displays).
 pub fn apply_gamma_ramp(
@@ -87,24 +130,7 @@ pub fn read_gamma_ramp_estimate(device_name: &str) -> Option<(f32, f32, f32)> {
         return None;
     }
 
-    // Sample green channel at 0%, 50%, 100%
-    let g0 = (ramp[256] as f32) / 65535.0;
-    let g50 = (ramp[256 + 128] as f32) / 65535.0;
-    let g100 = (ramp[256 + 255] as f32) / 65535.0;
-
-    let contrast = ((g100 - g0) * 50.0).clamp(10.0, 100.0).round();
-    let brightness = (50.0 + ((g0 + g100) * 0.5 - 0.5) * 100.0)
-        .clamp(0.0, 100.0)
-        .round();
-    let mid_norm = if (g100 - g0).abs() > 0.05 {
-        ((g50 - g0) / (g100 - g0)).clamp(0.05, 0.95)
-    } else {
-        0.5
-    };
-    let gamma = (0.5_f32.ln() / mid_norm.ln()).clamp(0.5, 2.5);
-    let gamma_rounded = (gamma * 20.0).round() / 20.0;
-
-    Some((brightness, contrast, gamma_rounded))
+    Some(decode_gamma_ramp(&ramp))
 }
 
 #[cfg(test)]
@@ -117,5 +143,21 @@ mod tests {
         assert_eq!(ramp[0], 0);
         assert_eq!(ramp[255], 65535);
         assert!((ramp[128] as i32 - 32896).abs() <= 256);
+        assert_eq!(decode_gamma_ramp(&ramp), (50.0, 50.0, 1.0));
+    }
+
+    #[test]
+    fn round_trips_brightness_45_contrast_55_even_with_clipped_endpoints() {
+        let ramp = build_gamma_ramp(45.0, 55.0, 1.0);
+        let (b, c, g) = decode_gamma_ramp(&ramp);
+        assert_eq!(b, 45.0);
+        assert_eq!(c, 55.0);
+        assert!((g - 1.0).abs() < 1e-3);
+
+        let ramp2 = build_gamma_ramp(45.0, 55.0, 1.20);
+        let (b2, c2, g2) = decode_gamma_ramp(&ramp2);
+        assert_eq!(b2, 45.0);
+        assert_eq!(c2, 55.0);
+        assert!((g2 - 1.20).abs() < 1e-3);
     }
 }

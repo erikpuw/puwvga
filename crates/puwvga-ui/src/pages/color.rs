@@ -39,7 +39,9 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
                             state.handle_backend_result(res, "Đã khôi phục màu mặc định");
                         }
                     }
-                    state.color_by_display.insert(disp.id, def);
+                    state.color_by_display.insert(disp.id, def.clone());
+                    state.color_by_display.insert(disp.device_name, def);
+                    state.auto_save_preset();
                 }
             }
         });
@@ -410,16 +412,20 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
     }
 
     state.color_by_display.insert(disp.id.clone(), color.clone());
+    state
+        .color_by_display
+        .insert(disp.device_name.clone(), color.clone());
     if changed {
+        state.auto_save_preset();
         if let Some(gpu) = owner {
             if let Some(b) = state.backends.get(&gpu.vendor).cloned() {
                 let res = b.set_color(&gpu.id, &disp.id, &color);
                 state.handle_backend_result(
                     res,
                     if is_vi {
-                        "Đã áp dụng cấu hình màu vào driver"
+                        "Đã áp dụng & lưu cấu hình màu"
                     } else {
-                        "Applied color settings to driver"
+                        "Applied & saved color settings"
                     },
                 );
             }

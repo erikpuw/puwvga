@@ -1,6 +1,6 @@
 use crate::state::AppState;
 use crate::theme::Palette;
-use crate::widgets::{section_header, setting_card};
+use crate::widgets::{section_header, segmented_control, setting_card};
 use egui::{RichText, Ui};
 use puwvga_core::{tr, Language, TextKey, ThemePreference};
 
@@ -31,6 +31,7 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
         },
     );
 
+    let mut theme_changed = false;
     setting_card(
         ui,
         p,
@@ -42,12 +43,22 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
         },
         None,
         |ui| {
-            ui.selectable_value(&mut state.theme, ThemePreference::Light, "Light");
-            ui.selectable_value(&mut state.theme, ThemePreference::Dark, "Dark");
-            ui.selectable_value(&mut state.theme, ThemePreference::System, "System");
+            if segmented_control(
+                ui,
+                p,
+                &mut state.theme,
+                &[
+                    (ThemePreference::System, "System"),
+                    (ThemePreference::Dark, "Dark"),
+                    (ThemePreference::Light, "Light"),
+                ],
+            ) {
+                theme_changed = true;
+            }
         },
     );
 
+    let mut lang_changed = false;
     setting_card(
         ui,
         p,
@@ -59,10 +70,20 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
         },
         None,
         |ui| {
-            ui.selectable_value(&mut state.language, Language::En, "English");
-            ui.selectable_value(&mut state.language, Language::Vi, "Tiếng Việt");
+            if segmented_control(
+                ui,
+                p,
+                &mut state.language,
+                &[(Language::Vi, "Tiếng Việt"), (Language::En, "English")],
+            ) {
+                lang_changed = true;
+            }
         },
     );
+
+    if theme_changed || lang_changed {
+        state.auto_save_preset();
+    }
 
     section_header(
         ui,

@@ -171,7 +171,21 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
             state.apply_mode_with_revert(&disp.device_name, current_mode, chosen_mode);
         }
 
+        let mut disp_changed = false;
         if let Some(ds) = state.display_settings_by_id.get_mut(&disp.id) {
+            let prev_ds = ds.clone();
+            let scaling_text = match ds.scaling {
+                ScalingMode::AspectRatio => "Aspect Ratio",
+                ScalingMode::FullScreen => "Full-screen",
+                ScalingMode::Center => "Center",
+                ScalingMode::Integer => {
+                    if gpu.vendor == Vendor::Intel {
+                        "Retro Scaling (Integer)"
+                    } else {
+                        "Integer Scaling"
+                    }
+                }
+            };
             setting_card(
                 ui,
                 p,
@@ -184,7 +198,7 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
                 None,
                 |ui| {
                     egui::ComboBox::from_id_salt("disp_scaling")
-                        .selected_text(format!("{:?}", ds.scaling))
+                        .selected_text(scaling_text)
                         .show_ui(ui, |ui| {
                             ui.selectable_value(
                                 &mut ds.scaling,
@@ -215,9 +229,10 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
                 Vendor::Intel => "Variable Refresh Rate (VRR)",
                 Vendor::Amd => "AMD FreeSync",
             };
-            setting_card(
+            setting_card_with_icon(
                 ui,
                 p,
+                IconKind::Toggle,
                 vrr_label,
                 if is_vi {
                     "Đồng bộ tần số quét chống xé hình"
@@ -244,12 +259,24 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
                     },
                     None,
                     |ui| {
-                        if crate::widgets::fluent_slider(ui, p, &mut sharp, 0.0..=100.0, 1.0, "%", 0).changed() {
+                        let r = crate::widgets::fluent_slider(ui, p, &mut sharp, 0.0..=100.0, 1.0, "%", 0);
+                        if r.changed() {
                             ds.sharpness = Some(sharp.round() as u32);
                         }
                     },
                 );
             }
+            if *ds != prev_ds {
+                disp_changed = true;
+            }
+        }
+        if disp_changed {
+            if let Some(ds_copy) = state.display_settings_by_id.get(&disp.id).cloned() {
+                state
+                    .display_settings_by_id
+                    .insert(disp.device_name.clone(), ds_copy);
+            }
+            state.auto_save_preset();
         }
     } else {
         setting_card(
