@@ -1,6 +1,6 @@
 use crate::state::AppState;
 use crate::theme::{vendor_color, Palette};
-use crate::widgets::{section_header, setting_card, spring_toggle, vendor_dot};
+use crate::widgets::{section_header, segmented_control, setting_card, spring_toggle, vendor_dot};
 use egui::{CornerRadius, Frame, Margin, RichText, Stroke, Ui};
 use puwvga_core::{
     tr, Language, SettingControl, SettingDescriptor, SettingScope, SettingValue, TextKey, Vendor,
@@ -31,21 +31,21 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if gpu.capabilities.per_app_3d {
-                let is_global = matches!(state.gfx_scope, SettingScope::Global);
-                if ui
-                    .selectable_label(!is_global, tr(lang, TextKey::PerAppScope))
-                    .clicked()
-                    && is_global
-                {
-                    state.gfx_scope = SettingScope::PerApp(state.per_app_name.clone());
-                    state.reload_active_graphics_settings();
-                }
-                if ui
-                    .selectable_label(is_global, tr(lang, TextKey::GlobalScope))
-                    .clicked()
-                    && !is_global
-                {
-                    state.gfx_scope = SettingScope::Global;
+                let mut is_global = matches!(state.gfx_scope, SettingScope::Global);
+                if segmented_control(
+                    ui,
+                    p,
+                    &mut is_global,
+                    &[
+                        (true, tr(lang, TextKey::GlobalScope)),
+                        (false, tr(lang, TextKey::PerAppScope)),
+                    ],
+                ) {
+                    state.gfx_scope = if is_global {
+                        SettingScope::Global
+                    } else {
+                        SettingScope::PerApp(state.per_app_name.clone())
+                    };
                     state.reload_active_graphics_settings();
                 }
             } else {
@@ -69,27 +69,27 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
                 let resp = Frame::new()
                     .fill(if active { p.accent_soft } else { p.bg_card })
                     .stroke(Stroke::new(
-                        1.0,
+                        1.0_f32,
                         if active { p.accent } else { p.border_subtle },
                     ))
                     .corner_radius(CornerRadius::same(8))
                     .inner_margin(Margin::symmetric(12, 8))
                     .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            vendor_dot(ui, vendor_color(g.vendor));
-                            ui.vertical(|ui| {
+                        ui.vertical(|ui| {
+                            ui.horizontal(|ui| {
+                                vendor_dot(ui, vendor_color(g.vendor));
                                 ui.label(
                                     RichText::new(&g.name)
                                         .size(13.0)
                                         .strong()
                                         .color(p.text_primary),
                                 );
-                                ui.label(
-                                    RichText::new(&g.driver_api)
-                                        .size(11.5)
-                                        .color(p.text_secondary),
-                                );
                             });
+                            ui.label(
+                                RichText::new(&g.driver_api)
+                                    .size(11.5)
+                                    .color(p.text_secondary),
+                            );
                         });
                     })
                     .response
@@ -133,8 +133,14 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
         .map(|s| s.section.clone())
         .unwrap_or_else(|| format!("{} 3D Settings", gpu.vendor.display_name()));
 
+    ui.add_space(6.0);
     ui.horizontal(|ui| {
-        section_header(ui, p, &main_section);
+        ui.label(
+            RichText::new(main_section.to_uppercase())
+                .size(11.5)
+                .strong()
+                .color(p.text_secondary),
+        );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui.button(tr(lang, TextKey::ResetDefaults)).clicked() {
                 if let Some(b) = state.backends.get(&gpu.vendor).cloned() {
@@ -145,6 +151,7 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
             }
         });
     });
+    ui.add_space(6.0);
 
     // Main (non-legacy) 3D settings
     let mut updates_3d: Vec<(String, SettingValue)> = Vec::new();
@@ -254,7 +261,13 @@ fn render_descriptor_card(
 
     let mut changed_value: Option<SettingValue> = None;
 
-    setting_card(ui, p, label, desc, lock, |ui| match &item.control {
+    let icon = match item.control {
+        SettingControl::Toggle => crate::widgets::IconKind::Toggle,
+        SettingControl::Slider { .. } => crate::widgets::IconKind::Sliders,
+        SettingControl::Enum(_) => crate::widgets::IconKind::List,
+    };
+
+    crate::widgets::setting_card_with_icon(ui, p, icon, label, desc, lock, |ui| match &item.control {
         SettingControl::Toggle => {
             let mut b = matches!(item.value, SettingValue::Bool(true));
             if spring_toggle(ui, p, &mut b).changed() {
@@ -308,11 +321,7 @@ fn render_descriptor_card(
                 SettingValue::Int(i) => i as f32,
                 _ => *min,
             };
-            let r = ui.add(
-                egui::Slider::new(&mut val, *min..=*max)
-                    .step_by(*step as f64)
-                    .suffix(unit.as_str()),
-            );
+            let r = crate::widgets::fluent_slider(ui, p, &mut val, *min..=*max, *step, unit.as_str(), 0);
             item.value = SettingValue::Float(val);
             if r.drag_stopped() || (r.changed() && !r.dragged()) {
                 changed_value = Some(SettingValue::Float(val));

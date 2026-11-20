@@ -14,8 +14,6 @@ struct IntelRuntime {
     fn_close: FnCtlClose,
     fn_get_device_props: FnCtlGetDeviceProperties,
     fn_enum_displays: FnCtlEnumerateDisplayOutputs,
-    fn_get_brightness: Option<FnCtlGetBrightnessSetting>,
-    fn_set_brightness: Option<FnCtlSetBrightnessSetting>,
     fn_get_lace: Option<FnCtlGetLaceConfig>,
     fn_set_lace: Option<FnCtlSetLaceConfig>,
     device_handles: Vec<CtlDeviceAdapterHandle>,
@@ -55,8 +53,6 @@ impl IntelBackend {
             fn_enum_devices,
             fn_get_device_props,
             fn_enum_displays,
-            fn_get_brightness,
-            fn_set_brightness,
             fn_get_lace,
             fn_set_lace,
         ) = unsafe {
@@ -77,14 +73,6 @@ impl IntelBackend {
                 .map_err(|_| {
                     BackendError::DllNotFound("ControlLib.dll (ctlEnumerateDisplayOutputs)")
                 })?;
-            let get_br = lib
-                .get::<FnCtlGetBrightnessSetting>(b"ctlGetBrightnessSetting\0")
-                .ok()
-                .map(|s| *s);
-            let set_br = lib
-                .get::<FnCtlSetBrightnessSetting>(b"ctlSetBrightnessSetting\0")
-                .ok()
-                .map(|s| *s);
             let get_lace = lib
                 .get::<FnCtlGetLaceConfig>(b"ctlGetLACEConfig\0")
                 .ok()
@@ -94,7 +82,7 @@ impl IntelBackend {
                 .ok()
                 .map(|s| *s);
             (
-                init, close, enum_dev, dev_props, enum_disp, get_br, set_br, get_lace, set_lace,
+                init, close, enum_dev, dev_props, enum_disp, get_lace, set_lace,
             )
         };
 
@@ -123,8 +111,6 @@ impl IntelBackend {
                 fn_close,
                 fn_get_device_props,
                 fn_enum_displays,
-                fn_get_brightness,
-                fn_set_brightness,
                 fn_get_lace,
                 fn_set_lace,
                 device_handles: handles,
@@ -230,13 +216,6 @@ impl GpuBackend for IntelBackend {
 
         let rt = self.runtime.lock().unwrap();
         if let Some(disp) = Self::first_display_handle(&rt) {
-            if let Some(get_br) = rt.fn_get_brightness {
-                let mut br = CtlGetBrightness::default();
-                if unsafe { get_br(disp, &mut br) } == CTL_RESULT_SUCCESS {
-                    // IGCL brightness is typically 0..=100000 (millinits/percent*1000)
-                    color.brightness = ((br.current_brightness as f32) / 1000.0).clamp(0.0, 100.0);
-                }
-            }
             if let Some(get_lace) = rt.fn_get_lace {
                 let mut lace = CtlLaceConfig::default();
                 if unsafe { get_lace(disp, &mut lace) } == CTL_RESULT_SUCCESS {
@@ -255,13 +234,6 @@ impl GpuBackend for IntelBackend {
     ) -> Result<(), BackendError> {
         let rt = self.runtime.lock().unwrap();
         if let Some(disp) = Self::first_display_handle(&rt) {
-            if let Some(set_br) = rt.fn_set_brightness {
-                let mut br = CtlSetBrightness {
-                    target_brightness: (settings.brightness.clamp(0.0, 100.0) * 1000.0) as u32,
-                    ..Default::default()
-                };
-                let _ = unsafe { set_br(disp, &mut br) };
-            }
             if let (Some(set_lace), Some(enabled)) = (rt.fn_set_lace, settings.lace_enabled) {
                 let mut lace = CtlLaceConfig {
                     enabled,

@@ -1,10 +1,14 @@
 use crate::state::AppState;
 use crate::theme::{vendor_color, Palette};
-use crate::widgets::{section_header, setting_card, spring_toggle, vendor_dot};
+use crate::widgets::{
+    fluent_slider, section_header, setting_card, setting_card_with_icon, spring_toggle, vendor_dot,
+    IconKind,
+};
 use egui::{CornerRadius, Frame, Margin, RichText, Stroke, Ui};
 use puwvga_core::{
     tr, ColorDepth, ColorSettings, DynamicRange, Language, OutputColorFormat, TextKey, Vendor,
 };
+use puwvga_win32::apply_gamma_ramp;
 
 pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
     let lang = state.language;
@@ -28,6 +32,7 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
             if ui.button(tr(lang, TextKey::ResetDefaults)).clicked() {
                 if let Some(disp) = state.displays.get(state.selected_display_idx).cloned() {
                     let def = ColorSettings::default();
+                    let _ = apply_gamma_ramp(&disp.device_name, def.brightness, def.contrast, def.gamma);
                     if let Some(gpu) = state.owner_gpu_for_display(&disp).cloned() {
                         if let Some(b) = state.backends.get(&gpu.vendor).cloned() {
                             let res = b.set_color(&gpu.id, &disp.id, &def);
@@ -55,37 +60,37 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
             let frame = Frame::new()
                 .fill(if active { p.accent_soft } else { p.bg_card })
                 .stroke(Stroke::new(
-                    1.0,
+                    1.0_f32,
                     if active { p.accent } else { p.border_subtle },
                 ))
                 .corner_radius(CornerRadius::same(8))
                 .inner_margin(Margin::symmetric(12, 8));
             let resp = frame
                 .show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        if let Some(ref g) = owner {
-                            vendor_dot(ui, vendor_color(g.vendor));
-                        }
-                        ui.vertical(|ui| {
+                    ui.vertical(|ui| {
+                        ui.horizontal(|ui| {
+                            if let Some(ref g) = owner {
+                                vendor_dot(ui, vendor_color(g.vendor));
+                            }
                             ui.label(
                                 RichText::new(&disp.friendly_name)
                                     .size(13.0)
                                     .strong()
                                     .color(p.text_primary),
                             );
-                            let owner_name = owner
-                                .as_ref()
-                                .map(|g| g.name.as_str())
-                                .unwrap_or("GPU");
-                            ui.label(
-                                RichText::new(format!(
-                                    "{} · {}×{} @ {}Hz",
-                                    owner_name, disp.width, disp.height, disp.refresh_hz
-                                ))
-                                .size(11.5)
-                                .color(p.text_secondary),
-                            );
                         });
+                        let owner_name = owner
+                            .as_ref()
+                            .map(|g| g.name.as_str())
+                            .unwrap_or("GPU");
+                        ui.label(
+                            RichText::new(format!(
+                                "{} · {}×{} @ {}Hz",
+                                owner_name, disp.width, disp.height, disp.refresh_hz
+                            ))
+                            .size(11.5)
+                            .color(p.text_secondary),
+                        );
                     });
                 })
                 .response
@@ -120,9 +125,12 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
         ),
     );
 
-    setting_card(
+    let mut gamma_live_changed = false;
+
+    setting_card_with_icon(
         ui,
         p,
+        IconKind::Sliders,
         "Brightness",
         if is_vi {
             "Độ sáng hiển thị đầu ra của driver"
@@ -131,16 +139,20 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
         },
         None,
         |ui| {
-            let r = ui.add(egui::Slider::new(&mut color.brightness, 0.0..=100.0).suffix("%"));
+            let r = fluent_slider(ui, p, &mut color.brightness, 0.0..=100.0, 1.0, "%", 0);
+            if r.changed() {
+                gamma_live_changed = true;
+            }
             if r.drag_stopped() || (r.changed() && !r.dragged()) {
                 changed = true;
             }
         },
     );
 
-    setting_card(
+    setting_card_with_icon(
         ui,
         p,
+        IconKind::Sliders,
         "Contrast",
         if is_vi {
             "Độ tương phản giữa vùng sáng và vùng tối"
@@ -149,16 +161,20 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
         },
         None,
         |ui| {
-            let r = ui.add(egui::Slider::new(&mut color.contrast, 0.0..=100.0).suffix("%"));
+            let r = fluent_slider(ui, p, &mut color.contrast, 0.0..=100.0, 1.0, "%", 0);
+            if r.changed() {
+                gamma_live_changed = true;
+            }
             if r.drag_stopped() || (r.changed() && !r.dragged()) {
                 changed = true;
             }
         },
     );
 
-    setting_card(
+    setting_card_with_icon(
         ui,
         p,
+        IconKind::Sliders,
         "Gamma",
         if is_vi {
             "Đường cong sáng trung gian (mặc định 1.00)"
@@ -167,20 +183,24 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
         },
         None,
         |ui| {
-            let r = ui.add(
-                egui::Slider::new(&mut color.gamma, 0.5..=2.5)
-                    .step_by(0.05)
-                    .fixed_decimals(2),
-            );
+            let r = fluent_slider(ui, p, &mut color.gamma, 0.5..=2.5, 0.05, "", 2);
+            if r.changed() {
+                gamma_live_changed = true;
+            }
             if r.drag_stopped() || (r.changed() && !r.dragged()) {
                 changed = true;
             }
         },
     );
 
-    setting_card(
+    if gamma_live_changed {
+        let _ = apply_gamma_ramp(&disp.device_name, color.brightness, color.contrast, color.gamma);
+    }
+
+    setting_card_with_icon(
         ui,
         p,
+        IconKind::Sliders,
         if vendor == Vendor::Nvidia {
             "Digital Vibrance"
         } else {
@@ -193,8 +213,14 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
         },
         None,
         |ui| {
-            let r = ui.add(
-                egui::Slider::new(&mut color.vibrance_or_saturation, 0.0..=100.0).suffix("%"),
+            let r = fluent_slider(
+                ui,
+                p,
+                &mut color.vibrance_or_saturation,
+                0.0..=100.0,
+                1.0,
+                "%",
+                0,
             );
             if r.drag_stopped() || (r.changed() && !r.dragged()) {
                 changed = true;
@@ -202,9 +228,10 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
         },
     );
 
-    setting_card(
+    setting_card_with_icon(
         ui,
         p,
+        IconKind::Sliders,
         "Hue",
         if is_vi {
             "Dịch chuyển tông màu (-180° đến +180°)"
@@ -213,7 +240,7 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
         },
         None,
         |ui| {
-            let r = ui.add(egui::Slider::new(&mut color.hue, -180.0..=180.0).suffix("°"));
+            let r = fluent_slider(ui, p, &mut color.hue, -180.0..=180.0, 1.0, "°", 0);
             if r.drag_stopped() || (r.changed() && !r.dragged()) {
                 changed = true;
             }
@@ -222,9 +249,10 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
 
     if vendor == Vendor::Intel {
         let mut lace = color.lace_enabled.unwrap_or(true);
-        setting_card(
+        setting_card_with_icon(
             ui,
             p,
+            IconKind::Toggle,
             "Dynamic Contrast Enhancement (LACE)",
             if is_vi {
                 "Tự cân bằng tương phản cục bộ trên Intel IGCL"
@@ -242,10 +270,11 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
     }
 
     if vendor == Vendor::Amd {
-        let mut k = color.color_temp_kelvin.unwrap_or(6500);
-        setting_card(
+        let mut k = color.color_temp_kelvin.unwrap_or(6500) as f32;
+        setting_card_with_icon(
             ui,
             p,
+            IconKind::Sliders,
             "Color Temperature",
             if is_vi {
                 "Nhiệt độ màu (Kelvin) trên AMD ADLX"
@@ -254,9 +283,9 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
             },
             None,
             |ui| {
-                let r = ui.add(egui::Slider::new(&mut k, 4000..=10000).suffix(" K"));
+                let r = fluent_slider(ui, p, &mut k, 4000.0..=10000.0, 100.0, " K", 0);
                 if r.drag_stopped() || (r.changed() && !r.dragged()) {
-                    color.color_temp_kelvin = Some(k);
+                    color.color_temp_kelvin = Some(k.round() as u32);
                     changed = true;
                 }
             },

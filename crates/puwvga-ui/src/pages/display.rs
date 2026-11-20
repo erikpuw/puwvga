@@ -1,6 +1,6 @@
 use crate::state::AppState;
 use crate::theme::{vendor_color, Palette};
-use crate::widgets::{section_header, setting_card, spring_toggle, vendor_dot};
+use crate::widgets::{section_header, setting_card, setting_card_with_icon, spring_toggle, vendor_dot, IconKind};
 use egui::{CornerRadius, Frame, Margin, RichText, Stroke, Ui};
 use puwvga_core::{tr, Language, ScalingMode, SpanningLayout, TextKey, Vendor};
 use std::time::Instant;
@@ -30,7 +30,7 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
             .as_secs();
         Frame::new()
             .fill(p.accent_soft)
-            .stroke(Stroke::new(1.0, p.accent))
+            .stroke(Stroke::new(1.0_f32, p.accent))
             .corner_radius(CornerRadius::same(8))
             .inner_margin(Margin::symmetric(14, 10))
             .show(ui, |ui| {
@@ -69,31 +69,31 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
                 let resp = Frame::new()
                     .fill(if active { p.accent_soft } else { p.bg_card })
                     .stroke(Stroke::new(
-                        1.0,
+                        1.0_f32,
                         if active { p.accent } else { p.border_subtle },
                     ))
                     .corner_radius(CornerRadius::same(8))
                     .inner_margin(Margin::symmetric(12, 8))
                     .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            vendor_dot(ui, vendor_color(g.vendor));
-                            ui.vertical(|ui| {
+                        ui.vertical(|ui| {
+                            ui.horizontal(|ui| {
+                                vendor_dot(ui, vendor_color(g.vendor));
                                 ui.label(
                                     RichText::new(&g.name)
                                         .size(13.0)
                                         .strong()
                                         .color(p.text_primary),
                                 );
-                                ui.label(
-                                    RichText::new(format!(
-                                        "{} {}",
-                                        attached,
-                                        if is_vi { "màn hình" } else { "display(s)" }
-                                    ))
-                                    .size(11.5)
-                                    .color(p.text_secondary),
-                                );
                             });
+                            ui.label(
+                                RichText::new(format!(
+                                    "{} {}",
+                                    attached,
+                                    if is_vi { "màn hình" } else { "display(s)" }
+                                ))
+                                .size(11.5)
+                                .color(p.text_secondary),
+                            );
                         });
                     })
                     .response
@@ -231,10 +231,11 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
             );
 
             if gpu.vendor == Vendor::Intel {
-                let mut sharp = ds.sharpness.unwrap_or(20);
-                setting_card(
+                let mut sharp = ds.sharpness.unwrap_or(20) as f32;
+                setting_card_with_icon(
                     ui,
                     p,
+                    IconKind::Sliders,
                     "Display Sharpness",
                     if is_vi {
                         "Độ sắc nét hình ảnh qua Intel IGCL"
@@ -243,13 +244,30 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
                     },
                     None,
                     |ui| {
-                        if ui.add(egui::Slider::new(&mut sharp, 0..=100).suffix("%")).changed() {
-                            ds.sharpness = Some(sharp);
+                        if crate::widgets::fluent_slider(ui, p, &mut sharp, 0.0..=100.0, 1.0, "%", 0).changed() {
+                            ds.sharpness = Some(sharp.round() as u32);
                         }
                     },
                 );
             }
         }
+    } else {
+        setting_card(
+            ui,
+            p,
+            if is_vi {
+                "Không có màn hình nào đang nối trực tiếp vào GPU này"
+            } else {
+                "No displays currently connected directly to this GPU"
+            },
+            if is_vi {
+                "Trên laptop chạy Optimus, màn hình nội bộ gắn vào iGPU; cắm màn hình rời qua HDMI/USB-C hoặc chuyển MUX sang dGPU để chỉnh trực tiếp."
+            } else {
+                "On Optimus laptops, the built-in panel is wired to the iGPU; attach an external monitor or switch MUX to dGPU to adjust display modes here."
+            },
+            None,
+            |_| {},
+        );
     }
 
     // Multi-Display Spanning section (NVIDIA Mosaic/Surround · Intel Combined Display · AMD Eyefinity)
@@ -273,9 +291,10 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
     );
 
     if attached_displays.len() < 2 {
-        setting_card(
+        setting_card_with_icon(
             ui,
             p,
+            IconKind::Span,
             tr(lang, TextKey::NeedTwoDisplays),
             &if is_vi {
                 format!(
@@ -322,7 +341,7 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
     // Visual grid preview
     Frame::new()
         .fill(p.bg_card)
-        .stroke(Stroke::new(1.0, p.border_subtle))
+        .stroke(Stroke::new(1.0_f32, p.border_subtle))
         .corner_radius(CornerRadius::same(8))
         .inner_margin(Margin::same(14))
         .show(ui, |ui| {
@@ -359,7 +378,7 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
                         Frame::new()
                             .fill(if cfg.enabled { p.accent_soft } else { p.bg_window })
                             .stroke(Stroke::new(
-                                1.0,
+                                1.0_f32,
                                 if cfg.enabled { p.accent } else { p.border_strong },
                             ))
                             .corner_radius(CornerRadius::same(6))
@@ -405,9 +424,10 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
         },
     );
 
-    setting_card(
+    setting_card_with_icon(
         ui,
         p,
+        IconKind::Sliders,
         "Bezel Compensation X",
         if is_vi {
             "Bù độ dày viền ngang giữa các màn hình (px)"
@@ -416,13 +436,17 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
         },
         None,
         |ui| {
-            ui.add(egui::Slider::new(&mut cfg.bezel.horizontal_px, 0..=120).suffix(" px"));
+            let mut bx = cfg.bezel.horizontal_px as f32;
+            if crate::widgets::fluent_slider(ui, p, &mut bx, 0.0..=120.0, 1.0, " px", 0).changed() {
+                cfg.bezel.horizontal_px = bx.round() as u32;
+            }
         },
     );
 
-    setting_card(
+    setting_card_with_icon(
         ui,
         p,
+        IconKind::Sliders,
         "Bezel Compensation Y",
         if is_vi {
             "Bù độ dày viền dọc giữa các màn hình (px)"
@@ -431,15 +455,19 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
         },
         None,
         |ui| {
-            ui.add(egui::Slider::new(&mut cfg.bezel.vertical_px, 0..=120).suffix(" px"));
+            let mut by = cfg.bezel.vertical_px as f32;
+            if crate::widgets::fluent_slider(ui, p, &mut by, 0.0..=120.0, 1.0, " px", 0).changed() {
+                cfg.bezel.vertical_px = by.round() as u32;
+            }
         },
     );
 
     let mut trigger_enable = false;
     let mut trigger_disable = false;
-    setting_card(
+    setting_card_with_icon(
         ui,
         p,
+        IconKind::Span,
         if cfg.enabled {
             if is_vi {
                 "Đang bật ghép màn hình"

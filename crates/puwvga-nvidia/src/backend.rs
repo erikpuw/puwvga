@@ -27,6 +27,7 @@ struct NvRuntime {
     fn_drs_load: Option<FnDrsLoadSettings>,
     fn_drs_save: Option<FnDrsSaveSettings>,
     fn_drs_base_profile: Option<FnDrsGetBaseProfile>,
+    fn_drs_get_setting: Option<FnDrsGetSetting>,
     fn_drs_set_setting: Option<FnDrsSetSetting>,
     fn_drs_restore_all: Option<FnDrsRestoreAllDefaults>,
     gpu_handles: Vec<NvPhysicalGpuHandle>,
@@ -110,6 +111,8 @@ impl NvidiaBackend {
             unsafe { query_fn(qi, NVAPI_DRS_SAVE_SETTINGS) };
         let fn_drs_base_profile: Option<FnDrsGetBaseProfile> =
             unsafe { query_fn(qi, NVAPI_DRS_GET_BASE_PROFILE) };
+        let fn_drs_get_setting: Option<FnDrsGetSetting> =
+            unsafe { query_fn(qi, NVAPI_DRS_GET_SETTING) };
         let fn_drs_set_setting: Option<FnDrsSetSetting> =
             unsafe { query_fn(qi, NVAPI_DRS_SET_SETTING) };
         let fn_drs_restore_all: Option<FnDrsRestoreAllDefaults> =
@@ -136,7 +139,7 @@ impl NvidiaBackend {
         let is_laptop = gpu_name.to_ascii_lowercase().contains("laptop");
         let _ = transmute::<usize, usize>; // keep import clean if needed
 
-        let cache = default_nvidia_values(&gpu_name);
+        let mut cache = default_nvidia_values(&gpu_name);
         let rt = NvRuntime {
             _lib: lib,
             fn_unload,
@@ -150,10 +153,12 @@ impl NvidiaBackend {
             fn_drs_load,
             fn_drs_save,
             fn_drs_base_profile,
+            fn_drs_get_setting,
             fn_drs_set_setting,
             fn_drs_restore_all,
             gpu_handles,
         };
+        Self::sync_cache_from_drs(&rt, &mut cache);
 
         Ok(Self {
             runtime: Mutex::new(rt),
@@ -174,6 +179,46 @@ impl NvidiaBackend {
 
     pub fn set_hdr_active(&self, active: bool) {
         *self.hdr_active.lock().unwrap() = active;
+    }
+
+    fn sync_cache_from_drs(rt: &NvRuntime, cache: &mut BTreeMap<String, SettingValue>) {
+        let (Some(create), Some(destroy), Some(load), Some(base_prof), Some(get_fn)) = (
+            rt.fn_drs_create,
+            rt.fn_drs_destroy,
+            rt.fn_drs_load,
+            rt.fn_drs_base_profile,
+            rt.fn_drs_get_setting,
+        ) else {
+            return;
+        };
+
+        let mut session: NvDrsSessionHandle = std::ptr::null_mut();
+        if unsafe { create(&mut session) } != NVAPI_OK || session.is_null() {
+            return;
+        }
+        if unsafe { load(session) } == NVAPI_OK {
+            let mut profile: NvDrsProfileHandle = std::ptr::null_mut();
+            if unsafe { base_prof(session, &mut profile) } == NVAPI_OK && !profile.is_null() {
+                let keys: Vec<String> = cache.keys().cloned().collect();
+                for key in keys {
+                    if let Some(drs_id) = drs_id_for_setting(&key) {
+                        let mut setting = Box::new(NvDrsSetting::new_dword(drs_id, 0));
+                        if unsafe { get_fn(session, profile, drs_id, setting.as_mut()) } == NVAPI_OK
+                        {
+                            let raw = setting.current_dword();
+                            let mapped = match cache.get(&key) {
+                                Some(SettingValue::Bool(_)) => SettingValue::Bool(raw != 0),
+                                _ => SettingValue::EnumId(decode_drs_dword(&key, raw)),
+                            };
+                            cache.insert(key, mapped);
+                        }
+                    }
+                }
+            }
+        }
+        unsafe {
+            let _ = destroy(session);
+        }
     }
 
     fn write_drs_dword(rt: &NvRuntime, drs_id: u32, dword_val: u32) -> Result<(), BackendError> {
@@ -430,14 +475,14 @@ impl GpuBackend for NvidiaBackend {
         value: &SettingValue,
     ) -> Result<(), BackendError> {
         if let Some(drs_id) = drs_id_for_setting(setting_id) {
-            let dword = match value {
+            let raw = match value {
                 SettingValue::Bool(b) => u32::from(*b),
-                SettingValue::EnumId(id) => *id,
+                SettingValue::EnumId(id) => encode_drs_dword(setting_id, *id),
                 SettingValue::Int(i) => *i as u32,
                 SettingValue::Float(f) => *f as u32,
             };
             let rt = self.runtime.lock().unwrap();
-            let _ = Self::write_drs_dword(&rt, drs_id, dword);
+            Self::write_drs_dword(&rt, drs_id, raw)?;
         }
         self.settings_cache
             .lock()
@@ -505,6 +550,34 @@ impl GpuBackend for NvidiaBackend {
         }
         *self.mux_cache.lock().unwrap() = mode;
         Ok(())
+    }
+}
+
+fn encode_drs_dword(setting_id: &str, ui_id: u32) -> u32 {
+    match setting_id {
+        "nv.vsync" => match ui_id {
+            0 => 0x0841_6747, // VSYNCMODE_PASSIVE (Use 3D app setting)
+            1 => 0x4781_4940, // VSYNCMODE_FORCEOFF
+            2 => 0x4781_4941, // VSYNCMODE_FORCEON
+            3 => 0x1888_8888, // VSYNCMODE_VIRTUAL (Fast)
+            4 => 0x6092_5292, // VSYNCMODE_FLIPINTERVAL2 / Adaptive
+            _ => 0x0841_6747,
+        },
+        _ => ui_id,
+    }
+}
+
+fn decode_drs_dword(setting_id: &str, raw: u32) -> u32 {
+    match setting_id {
+        "nv.vsync" => match raw {
+            0x0841_6747 => 0,
+            0x4781_4940 => 1,
+            0x4781_4941 => 2,
+            0x1888_8888 => 3,
+            0x6092_5292 => 4,
+            _ => 0,
+        },
+        _ => raw,
     }
 }
 

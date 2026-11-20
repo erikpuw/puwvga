@@ -9,7 +9,7 @@ use puwvga_intel::IntelBackend;
 use puwvga_nvidia::NvidiaBackend;
 use puwvga_win32::{
     apply_display_mode, enumerate_active_displays, enumerate_dxgi_adapters, is_windows_dark_mode,
-    list_supported_modes,
+    list_supported_modes, read_gamma_ramp_estimate,
 };
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -215,16 +215,21 @@ impl AppState {
                 });
 
             if !self.color_by_display.contains_key(&disp.id) {
-                if let Some(gpu) = self.owner_gpu_for_display(disp) {
-                    if let Some(backend) = self.backends.get(&gpu.vendor) {
-                        if let Ok(c) = backend.get_color(&gpu.id, &disp.id) {
-                            self.color_by_display.insert(disp.id.clone(), c);
-                            continue;
-                        }
-                    }
+                let mut initial = if let Some(gpu) = self.owner_gpu_for_display(disp) {
+                    self.backends
+                        .get(&gpu.vendor)
+                        .and_then(|b| b.get_color(&gpu.id, &disp.id).ok())
+                        .unwrap_or_default()
+                } else {
+                    ColorSettings::default()
+                };
+                // Read live hardware LUT from Win32 GetDeviceGammaRamp so Brightness/Contrast/Gamma match current screen
+                if let Some((b, c, g)) = read_gamma_ramp_estimate(&disp.device_name) {
+                    initial.brightness = b;
+                    initial.contrast = c;
+                    initial.gamma = g;
                 }
-                self.color_by_display
-                    .insert(disp.id.clone(), ColorSettings::default());
+                self.color_by_display.insert(disp.id.clone(), initial);
             }
         }
 
