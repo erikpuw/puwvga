@@ -47,7 +47,7 @@ The application talks directly to the vendor libraries shipped with your graphic
 
 - NVIDIA (`nvapi64.dll` and DRS `nvdrsdb.bin`): supports Global and Per-App profiles with 20 Driver Settings (DLSS Override, Smooth Motion, Low Latency Mode, DSR, Image Scaling, RTX Dynamic Vibrance, RTX HDR, and more), 11 collapsible Legacy Settings, and 3 Video settings.
 - Intel (`ControlLib.dll` IGCL): queries hardware capability flags for 3D features (Flip Mode/VSync, Low Latency, Frame Limit, CMAA, Adaptive Tessellation, Sharpening, Endurance Gaming) and Video Processing (Super Resolution, Film Mode, Denoise, Adaptive Sharpening).
-- AMD (`atiadlxx.dll` ADLX): supports Global and Per-App profiles for 3D Gaming (Radeon Anti-Lag, Chill, Boost, RIS, Enhanced Sync, Vertical Refresh, FRTC, Texture Quality, Surface Format Optimization, Tessellation) and Video.
+- AMD (`atiadlxx.dll` ADL2): sets saturation, hue, and color temperature on the selected display through `ADL2_Display_Color_Set`, within the range the driver reports. It follows the ADL SDK but has not been tested on AMD hardware yet. AMD 3D Gaming and Video options are only stored in the preset for now and are not written to the driver.
 
 ### Interface, localization, and presets
 
@@ -75,7 +75,7 @@ Note: release binaries are currently unsigned. Windows SmartScreen may show a "W
 - `crates/puwvga-win32`: DXGI GPU enumeration, Win32 CCD display mapping and mode switching, Gamma Ramp read/write, and Windows theme detection.
 - `crates/puwvga-intel`: dynamic FFI loader for `ControlLib.dll` (Intel IGCL).
 - `crates/puwvga-nvidia`: dynamic FFI loader for `nvapi64.dll` and DRS `nvdrsdb.bin`.
-- `crates/puwvga-amd`: dynamic FFI loader for `atiadlxx.dll` (AMD ADL/ADLX).
+- `crates/puwvga-amd`: dynamic FFI loader for `atiadlxx.dll` (AMD ADL2).
 - `crates/puwvga-ui`: native Rust GUI (`eframe`/`egui`).
 - `crates/puwvga-installer`: native Rust Windows installer and uninstaller.
 - `installer/puwvga.iss`: optional Inno Setup 6 packaging script.

@@ -47,7 +47,7 @@
 
 - NVIDIA (`nvapi64.dll` và DRS `nvdrsdb.bin`): hỗ trợ Global và Per-App với 20 mục Driver Settings (DLSS Override, Smooth Motion, Low Latency Mode, DSR, Image Scaling, RTX Dynamic Vibrance, RTX HDR...), 11 mục Legacy Settings thu gọn được, và 3 mục Video.
 - Intel (`ControlLib.dll` IGCL): đọc cờ hỗ trợ trực tiếp từ phần cứng cho các tính năng 3D (Flip Mode/VSync, Low Latency, Frame Limit, CMAA, Adaptive Tessellation, Sharpening, Endurance Gaming) và Video Processing (Super Resolution, Film Mode, Denoise, Adaptive Sharpening).
-- AMD (`atiadlxx.dll` ADLX): hỗ trợ Global và Per-App cho nhóm 3D Gaming (Radeon Anti-Lag, Chill, Boost, RIS, Enhanced Sync, Vertical Refresh, FRTC, Texture Quality, Surface Format Optimization, Tessellation) và Video.
+- AMD (`atiadlxx.dll` ADL2): chỉnh Saturation, Hue và nhiệt độ màu cho đúng màn hình đang chọn qua `ADL2_Display_Color_Set`, theo khoảng giá trị driver báo về. Phần này viết theo ADL SDK nhưng chưa được thử trên máy AMD thật. Các mục 3D Gaming và Video của AMD hiện chỉ lưu trong preset, chưa ghi vào driver.
 
 ### Giao diện, song ngữ và lưu cấu hình
 
@@ -75,7 +75,7 @@ Lưu ý: các bản dựng hiện tại chưa có chữ ký số (unsigned). Win
 - `crates/puwvga-win32`: liệt kê GPU qua DXGI, ánh xạ màn hình và đổi độ phân giải/Hz qua Win32 CCD, đọc/ghi Gamma Ramp và đọc theme Windows.
 - `crates/puwvga-intel`: FFI động nạp `ControlLib.dll` (Intel IGCL).
 - `crates/puwvga-nvidia`: FFI động nạp `nvapi64.dll` và DRS `nvdrsdb.bin`.
-- `crates/puwvga-amd`: FFI động nạp `atiadlxx.dll` (AMD ADL/ADLX).
+- `crates/puwvga-amd`: FFI động nạp `atiadlxx.dll` (AMD ADL2).
 - `crates/puwvga-ui`: giao diện ứng dụng viết bằng Rust (`eframe`/`egui`).
 - `crates/puwvga-installer`: trình cài đặt và gỡ cài đặt Windows viết bằng Rust thuần.
 - `installer/puwvga.iss`: script Inno Setup 6 bổ sung cho quy trình đóng gói.
