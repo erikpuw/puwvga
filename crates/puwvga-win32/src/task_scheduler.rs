@@ -14,6 +14,18 @@ use windows::Win32::System::TaskScheduler::{
 
 pub const STARTUP_TASK_NAME: &str = "puwvga_ApplyColor";
 
+fn current_user_id() -> Option<String> {
+    let user = std::env::var("USERNAME").ok()?;
+    let user = user.trim();
+    if user.is_empty() {
+        return None;
+    }
+    match std::env::var("USERDOMAIN") {
+        Ok(domain) if !domain.trim().is_empty() => Some(format!("{}\\{}", domain.trim(), user)),
+        _ => Some(user.to_string()),
+    }
+}
+
 fn with_task_root<T>(f: impl FnOnce(&ITaskService, &ITaskFolder) -> Result<T, String>) -> Result<T, String> {
     unsafe {
         let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
@@ -64,12 +76,21 @@ pub fn set_apply_on_startup(enabled: bool, exe_path: &Path) -> Result<(), String
             return Ok(());
         }
 
+        let user_id = current_user_id()
+            .ok_or_else(|| "Cannot determine current Windows USERNAME".to_string())?;
+        let user_bstr = BSTR::from(user_id.as_str());
+
         let task_def = service
             .NewTask(0)
             .map_err(|e| format!("ITaskService::NewTask: {e}"))?;
 
+        if let Ok(principal) = task_def.Principal() {
+            let _ = principal.SetUserId(&user_bstr);
+            let _ = principal.SetLogonType(TASK_LOGON_INTERACTIVE_TOKEN);
+        }
+
         if let Ok(reg_info) = task_def.RegistrationInfo() {
-            let _ = reg_info.SetAuthor(&BSTR::from("erikpuw"));
+            let _ = reg_info.SetAuthor(&user_bstr);
             let _ = reg_info.SetDescription(&BSTR::from(
                 "Re-apply puwvga display color settings on Windows logon and session unlock.",
             ));
@@ -89,7 +110,7 @@ pub fn set_apply_on_startup(enabled: bool, exe_path: &Path) -> Result<(), String
             .Triggers()
             .map_err(|e| format!("ITaskDefinition::Triggers: {e}"))?;
 
-        // Trigger 1: At user logon (2s delay so it runs after Windows WCS Calibration Loader)
+        // Trigger 1: At logon of CURRENT user (required for non-admin Task Scheduler registration)
         let logon_base = triggers
             .Create(TASK_TRIGGER_LOGON)
             .map_err(|e| format!("Create(TASK_TRIGGER_LOGON): {e}"))?;
@@ -97,10 +118,11 @@ pub fn set_apply_on_startup(enabled: bool, exe_path: &Path) -> Result<(), String
             .cast()
             .map_err(|e| format!("cast ILogonTrigger: {e}"))?;
         let _ = logon_trigger.SetId(&BSTR::from("LogonTrigger"));
+        let _ = logon_trigger.SetUserId(&user_bstr);
         let _ = logon_trigger.SetDelay(&BSTR::from("PT2S"));
         let _ = logon_trigger.SetEnabled(VARIANT_BOOL::from(true));
 
-        // Trigger 2: On workstation unlock / wake from sleep (1s delay)
+        // Trigger 2: On workstation unlock / wake from sleep for CURRENT user
         let unlock_base = triggers
             .Create(TASK_TRIGGER_SESSION_STATE_CHANGE)
             .map_err(|e| format!("Create(TASK_TRIGGER_SESSION_STATE_CHANGE): {e}"))?;
@@ -108,6 +130,7 @@ pub fn set_apply_on_startup(enabled: bool, exe_path: &Path) -> Result<(), String
             .cast()
             .map_err(|e| format!("cast ISessionStateChangeTrigger: {e}"))?;
         let _ = unlock_trigger.SetId(&BSTR::from("UnlockTrigger"));
+        let _ = unlock_trigger.SetUserId(&user_bstr);
         let _ = unlock_trigger.SetStateChange(TASK_SESSION_UNLOCK);
         let _ = unlock_trigger.SetDelay(&BSTR::from("PT1S"));
         let _ = unlock_trigger.SetEnabled(VARIANT_BOOL::from(true));
@@ -133,11 +156,12 @@ pub fn set_apply_on_startup(enabled: bool, exe_path: &Path) -> Result<(), String
             let _ = exec_action.SetWorkingDirectory(&BSTR::from(dir.display().to_string().as_str()));
         }
 
+        let user_var = VARIANT::from(user_bstr);
         root.RegisterTaskDefinition(
             &BSTR::from(STARTUP_TASK_NAME),
             &task_def,
             TASK_CREATE_OR_UPDATE.0,
-            &VARIANT::default(),
+            &user_var,
             &VARIANT::default(),
             TASK_LOGON_INTERACTIVE_TOKEN,
             &VARIANT::default(),
@@ -155,5 +179,19 @@ mod tests {
     #[test]
     fn startup_task_name_is_non_empty() {
         assert_eq!(STARTUP_TASK_NAME, "puwvga_ApplyColor");
+        assert!(current_user_id().is_some());
+    }
+
+    #[test]
+    #[ignore]
+    fn live_verify_task_scheduler_non_admin_registration() {
+        let exe = std::env::current_exe().unwrap();
+        let res = set_apply_on_startup(true, &exe);
+        println!("set_apply_on_startup(true) -> {:?}", res);
+        assert!(res.is_ok(), "RegisterTaskDefinition failed: {:?}", res);
+        assert!(is_apply_on_startup_enabled());
+        let del = set_apply_on_startup(false, &exe);
+        assert!(del.is_ok());
+        assert!(!is_apply_on_startup_enabled());
     }
 }

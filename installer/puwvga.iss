@@ -2,7 +2,7 @@
 ; Compile with: iscc installer\puwvga.iss
 
 #define MyAppName "puwvga"
-#define MyAppVersion "1.0.2"
+#define MyAppVersion "1.0.3"
 #define MyAppPublisher "erikpuw"
 #define MyAppURL "https://github.com/erikpuw/puwvga"
 #define MyAppExeName "puwvga.exe"

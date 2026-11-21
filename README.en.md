@@ -64,8 +64,8 @@ The application talks directly to the vendor libraries shipped with your graphic
 
 Prebuilt binaries are published on the [Releases](https://github.com/erikpuw/puwvga/releases) page:
 
-- `puwvga-v1.0.2-portable-x64.exe`: standalone portable executable, no installation required.
-- `puwvga-setup-v1.0.2-x64.exe`: Windows installer that creates Start Menu and Desktop shortcuts and registers an uninstaller in Windows Settings (Apps).
+- `puwvga-v1.0.3-portable-x64.exe`: standalone portable executable, no installation required.
+- `puwvga-setup-v1.0.3-x64.exe`: Windows installer that creates Start Menu and Desktop shortcuts and registers an uninstaller in Windows Settings (Apps).
 
 Note: release binaries are currently unsigned. Windows SmartScreen may show a "Windows protected your PC" prompt on the first launch. Choose **More info** and click **Run anyway** to proceed.
 
