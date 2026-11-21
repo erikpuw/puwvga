@@ -10,6 +10,20 @@
 
 Ứng dụng giao tiếp trực tiếp với các thư viện chính thức có sẵn trong driver (`ControlLib.dll`, `nvapi64.dll`, `atiadlxx.dll`) và các API hiển thị của Windows (DXGI, CCD, Gamma Ramp). Phần giao diện viết bằng Rust (`eframe`/`egui`), liên kết tĩnh VC++ Runtime, không dùng WebView và không chạy tiến trình nền sau khi đóng cửa sổ.
 
+## Ảnh chụp giao diện
+
+### Tổng quan phần cứng
+
+![Tổng quan phần cứng puwvga](assets/screenshots/dashboard-vi.png)
+
+### Màu sắc và độ sáng
+
+![Màu sắc và độ sáng puwvga](assets/screenshots/color-vi.png)
+
+### Cấu hình 3D và Video
+
+![Cấu hình 3D và Video puwvga](assets/screenshots/graphics-vi.png)
+
 ## Tính năng
 
 ### Nhận diện phần cứng và ánh xạ màn hình

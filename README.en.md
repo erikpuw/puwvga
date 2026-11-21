@@ -10,6 +10,20 @@
 
 The application talks directly to the vendor libraries shipped with your graphics drivers (`ControlLib.dll`, `nvapi64.dll`, `atiadlxx.dll`) alongside native Windows display APIs (DXGI, CCD, and Gamma Ramp). The UI is written in Rust (`eframe`/`egui`) with a statically linked VC++ runtime, no WebView dependency, and no background service after you close the window.
 
+## Screenshots
+
+### Hardware overview
+
+![puwvga Hardware Overview](assets/screenshots/dashboard-en.png)
+
+### Color and brightness
+
+![puwvga Color and Brightness](assets/screenshots/color-en.png)
+
+### 3D and Video settings
+
+![puwvga 3D and Video](assets/screenshots/graphics-en.png)
+
 ## Features
 
 ### Hardware detection and display mapping
