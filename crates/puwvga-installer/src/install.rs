@@ -1,5 +1,6 @@
 use crate::shortcut::create_shortcut;
 use flate2::read::GzDecoder;
+use puwvga_win32::set_apply_on_startup;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -26,6 +27,7 @@ pub struct InstallOptions {
     pub install_dir: PathBuf,
     pub create_start_menu: bool,
     pub create_desktop: bool,
+    pub enable_startup_task: bool,
 }
 
 pub fn default_install_dir() -> PathBuf {
@@ -113,11 +115,15 @@ pub fn perform_install(opts: &InstallOptions) -> Result<PathBuf, String> {
 
     let estimated_kb = ((exe_bytes.len() as u64) / 1024).max(1) as u32;
     register_uninstall_entry(&opts.install_dir, &target_ico, &uninstaller_exe, estimated_kb)?;
+    if opts.enable_startup_task {
+        let _ = set_apply_on_startup(true, &target_exe);
+    }
 
     Ok(target_exe)
 }
 
 pub fn perform_uninstall(install_dir: &Path) -> Result<(), String> {
+    let _ = set_apply_on_startup(false, &install_dir.join("puwvga.exe"));
     if let Some(lnk) = start_menu_shortcut_path() {
         let _ = fs::remove_file(lnk);
     }

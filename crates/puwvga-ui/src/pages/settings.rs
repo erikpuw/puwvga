@@ -1,6 +1,6 @@
 use crate::state::AppState;
 use crate::theme::Palette;
-use crate::widgets::{section_header, segmented_control, setting_card};
+use crate::widgets::{section_header, segmented_control, setting_card, spring_toggle};
 use egui::{RichText, Ui};
 use puwvga_core::{tr, Language, TextKey, ThemePreference};
 
@@ -122,6 +122,42 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
     }
     if do_apply {
         state.apply_saved_preset();
+    }
+
+    section_header(
+        ui,
+        p,
+        if is_vi {
+            "Khởi động cùng Windows (Task Scheduler)"
+        } else {
+            "Windows Startup (Task Scheduler)"
+        },
+    );
+
+    let mut startup_on = state.startup_task_enabled;
+    let mut startup_changed = false;
+    setting_card(
+        ui,
+        p,
+        if is_vi {
+            "Tự áp màu khi đăng nhập và mở khóa máy"
+        } else {
+            "Auto-apply color on logon and unlock"
+        },
+        if is_vi {
+            "Đăng ký tác vụ puwvga_ApplyColor (--apply-only): áp màu trong ~50 ms rồi thoát hẳn, không chạy nền"
+        } else {
+            "Registers puwvga_ApplyColor (--apply-only): re-applies color in ~50 ms and exits with zero background process"
+        },
+        None,
+        |ui| {
+            if spring_toggle(ui, p, &mut startup_on).changed() {
+                startup_changed = true;
+            }
+        },
+    );
+    if startup_changed {
+        state.set_startup_task(startup_on);
     }
 
     section_header(ui, p, if is_vi { "Thông tin" } else { "About" });

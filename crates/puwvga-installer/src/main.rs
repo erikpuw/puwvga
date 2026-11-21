@@ -33,6 +33,7 @@ struct InstallerApp {
     install_dir_text: String,
     create_start_menu: bool,
     create_desktop: bool,
+    enable_startup_task: bool,
     launch_after: bool,
     status: Status,
     message: String,
@@ -59,6 +60,7 @@ impl InstallerApp {
             install_dir_text: dir.display().to_string(),
             create_start_menu: true,
             create_desktop: true,
+            enable_startup_task: true,
             launch_after: true,
             status: Status::Ready,
             message: String::new(),
@@ -164,6 +166,14 @@ impl eframe::App for InstallerApp {
                                     },
                                 );
                                 ui.checkbox(
+                                    &mut self.enable_startup_task,
+                                    if self.is_vi {
+                                        "Tự áp màu cùng Windows (Task Scheduler, không chạy nền)"
+                                    } else {
+                                        "Auto-apply color with Windows (Task Scheduler, no background process)"
+                                    },
+                                );
+                                ui.checkbox(
                                     &mut self.launch_after,
                                     if self.is_vi {
                                         "Mở puwvga sau khi cài xong"
@@ -248,6 +258,7 @@ impl eframe::App for InstallerApp {
                                             install_dir: PathBuf::from(self.install_dir_text.trim()),
                                             create_start_menu: self.create_start_menu,
                                             create_desktop: self.create_desktop,
+                                            enable_startup_task: self.enable_startup_task,
                                         };
                                         match perform_install(&opts) {
                                             Ok(exe) => {
@@ -345,6 +356,7 @@ fn main() -> eframe::Result<()> {
             install_dir: default_install_dir(),
             create_start_menu: true,
             create_desktop: true,
+            enable_startup_task: true,
         };
         let _ = perform_install(&opts);
         return Ok(());
@@ -365,7 +377,7 @@ fn main() -> eframe::Result<()> {
         viewport: egui::ViewportBuilder::default()
             .with_title(format!("{APP_NAME} v{APP_VERSION} Setup"))
             .with_icon(Arc::new(load_window_icon()))
-            .with_inner_size(Vec2::new(520.0, 340.0))
+            .with_inner_size(Vec2::new(520.0, 365.0))
             .with_resizable(false),
         ..Default::default()
     };

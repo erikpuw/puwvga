@@ -9,7 +9,8 @@ use puwvga_intel::IntelBackend;
 use puwvga_nvidia::NvidiaBackend;
 use puwvga_win32::{
     apply_display_mode, apply_gamma_ramp, enumerate_active_displays, enumerate_dxgi_adapters,
-    is_windows_dark_mode, list_supported_modes, read_gamma_ramp_estimate,
+    is_apply_on_startup_enabled, is_windows_dark_mode, list_supported_modes,
+    read_gamma_ramp_estimate, set_apply_on_startup,
 };
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -78,6 +79,7 @@ pub struct AppState {
     pub pending_revert: Option<PendingDisplayRevert>,
     pub toast: Option<(String, Instant)>,
     pub needs_admin_banner: bool,
+    pub startup_task_enabled: bool,
 }
 
 impl AppState {
@@ -119,11 +121,39 @@ impl AppState {
             pending_revert: None,
             toast: None,
             needs_admin_banner: false,
+            startup_task_enabled: is_apply_on_startup_enabled(),
         };
 
         state.init_backends();
         state.refresh_hardware();
         state
+    }
+
+    pub fn set_startup_task(&mut self, enabled: bool) {
+        let Ok(exe) = std::env::current_exe() else {
+            self.set_toast("Không xác định được đường dẫn puwvga.exe");
+            return;
+        };
+        match set_apply_on_startup(enabled, &exe) {
+            Ok(()) => {
+                self.startup_task_enabled = enabled;
+                let msg = match (self.language, enabled) {
+                    (Language::Vi, true) => {
+                        "Đã bật tự áp màu cùng Windows (Task Scheduler: Logon & Unlock)"
+                    }
+                    (Language::Vi, false) => "Đã tắt tự áp màu khi khởi động Windows",
+                    (Language::En, true) => {
+                        "Enabled auto-apply with Windows (Task Scheduler: Logon & Unlock)"
+                    }
+                    (Language::En, false) => "Disabled auto-apply on Windows startup",
+                };
+                self.set_toast(msg);
+            }
+            Err(e) => {
+                self.startup_task_enabled = is_apply_on_startup_enabled();
+                self.set_toast(format!("Task Scheduler error: {e}"));
+            }
+        }
     }
 
     fn init_backends(&mut self) {

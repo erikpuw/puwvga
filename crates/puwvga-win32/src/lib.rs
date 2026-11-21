@@ -1,6 +1,7 @@
 pub mod display_ccd;
 pub mod dxgi;
 pub mod gamma_ramp;
+pub mod task_scheduler;
 pub mod theme;
 
 pub use display_ccd::{
@@ -8,4 +9,5 @@ pub use display_ccd::{
 };
 pub use dxgi::{enumerate_dxgi_adapters, DxgiAdapter};
 pub use gamma_ramp::{apply_gamma_ramp, build_gamma_ramp, read_gamma_ramp_estimate};
+pub use task_scheduler::{is_apply_on_startup_enabled, set_apply_on_startup, STARTUP_TASK_NAME};
 pub use theme::{apply_dwm_dark_titlebar, is_windows_dark_mode, relaunch_as_administrator};

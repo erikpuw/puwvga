@@ -54,6 +54,7 @@ The application talks directly to the vendor libraries shipped with your graphic
 - Dark and Light themes synchronized with Windows 11.
 - Instant language switching between Vietnamese and English in Settings.
 - Changes are saved automatically to `puwvga.presets.json` next to the executable (falling back to `%APPDATA%\puwvga\` when the install folder is read-only) and restored on the next launch.
+- Optional Windows Task Scheduler integration (`puwvga_ApplyColor` running `puwvga.exe --apply-only` on logon and session unlock) re-applies color settings automatically and exits immediately with no background process.
 
 ## Intentional omissions
 

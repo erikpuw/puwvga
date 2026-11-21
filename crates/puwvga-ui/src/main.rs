@@ -401,6 +401,13 @@ fn load_window_icon() -> egui::IconData {
 }
 
 fn main() -> eframe::Result<()> {
+    // Headless fast path invoked by Windows Task Scheduler on logon / unlock:
+    // loads puwvga.presets.json, re-applies color LUT + IGCL CSC + NVAPI DVC, then exits immediately.
+    if std::env::args().any(|a| a == "--apply-only") {
+        let _state = AppState::new();
+        std::process::exit(0);
+    }
+
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("puwvga")

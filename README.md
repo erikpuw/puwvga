@@ -54,6 +54,7 @@
 - Giao diện tối và sáng đồng bộ với Windows 11.
 - Chuyển đổi trực tiếp giữa Tiếng Việt và English trong mục Cài đặt.
 - Mọi thay đổi được tự động lưu vào `puwvga.presets.json` đặt cạnh file `.exe` (tự chuyển sang `%APPDATA%\puwvga\` nếu thư mục cài đặt chỉ đọc) và khôi phục lại ở lần mở tiếp theo.
+- Hỗ trợ tùy chọn tự áp màu cùng Windows qua Task Scheduler (`puwvga_ApplyColor` gọi `puwvga.exe --apply-only` khi đăng nhập hoặc mở khóa máy, áp xong thoát ngay, không chạy tiến trình nền).
 
 ## Phạm vi loại trừ
 
