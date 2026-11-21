@@ -34,6 +34,11 @@ impl PuwvgaApp {
 
 impl eframe::App for PuwvgaApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Exit on the close click itself, before eframe tears down the window and GL context.
+        if ctx.input(|i| i.viewport().close_requested()) {
+            eframe::App::on_exit(self, None);
+        }
+
         let dark = self.state.is_dark();
         let p = Palette::for_mode(dark);
         if self.last_dark != Some(dark) {
@@ -96,7 +101,11 @@ impl eframe::App for PuwvgaApp {
                                 .color(p.text_primary),
                         );
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            ui.label(RichText::new("Portable").size(10.5).color(p.text_muted));
+                            ui.label(
+                                RichText::new(self.state.edition_label())
+                                    .size(10.5)
+                                    .color(p.text_muted),
+                            );
                         });
                     });
                     ui.add_space(12.0);

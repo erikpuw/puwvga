@@ -51,6 +51,8 @@ pub struct AppState {
     pub theme: ThemePreference,
     pub system_dark: bool,
     pub preset_path: PathBuf,
+    /// False when an installer's uninstaller sits next to the exe (setup build).
+    pub portable: bool,
 
     pub adapters: Vec<GpuAdapterInfo>,
     pub displays: Vec<DisplayOutputInfo>,
@@ -92,6 +94,9 @@ impl AppState {
             .map(PathBuf::from)
             .unwrap_or_else(|| exe_dir.clone());
         let preset_path = PresetStore::resolve_path(&exe_dir, &appdata_dir);
+        let portable = !["puwvga-uninstall.exe", "unins000.exe"]
+            .iter()
+            .any(|f| exe_dir.join(f).is_file());
 
         let loaded = PresetStore::load(&preset_path).unwrap_or_default();
 
@@ -101,6 +106,7 @@ impl AppState {
             theme: loaded.theme,
             system_dark: is_windows_dark_mode(),
             preset_path,
+            portable,
             adapters: Vec::new(),
             displays: Vec::new(),
             selected_gpu_idx: 0,
@@ -490,6 +496,14 @@ impl AppState {
     }
 
     /// Automatically persists current settings to `puwvga.presets.json` whenever any control changes.
+    pub fn edition_label(&self) -> &'static str {
+        match (self.portable, self.language == Language::Vi) {
+            (true, _) => "Portable",
+            (false, true) => "Bản cài đặt",
+            (false, false) => "Installed",
+        }
+    }
+
     pub fn auto_save_preset(&self) {
         let bundle = self.current_preset_bundle();
         let _ = PresetStore::save(&self.preset_path, &bundle);

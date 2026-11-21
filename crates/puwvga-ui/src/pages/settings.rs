@@ -89,9 +89,9 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
         ui,
         p,
         if is_vi {
-            "Preset cục bộ (Portable JSON)"
+            "Preset cục bộ (JSON)"
         } else {
-            "Local Presets (Portable JSON)"
+            "Local Presets (JSON)"
         },
     );
 
@@ -172,7 +172,7 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
         },
         None,
         |ui| {
-            ui.label(RichText::new("Portable").size(12.0).color(p.accent));
+            ui.label(RichText::new(state.edition_label()).size(12.0).color(p.accent));
         },
     );
 }
