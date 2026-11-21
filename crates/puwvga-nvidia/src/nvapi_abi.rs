@@ -2,6 +2,8 @@ use std::ffi::{c_char, c_void};
 
 pub type NvApiStatus = i32;
 pub const NVAPI_OK: NvApiStatus = 0;
+/// Adding a new setting to the Base profile needs an elevated process.
+pub const NVAPI_INVALID_USER_PRIVILEGE: NvApiStatus = -137;
 
 pub type NvPhysicalGpuHandle = *mut c_void;
 pub type NvDisplayHandle = *mut c_void;
@@ -31,7 +33,8 @@ pub const NVAPI_DRS_SET_SETTING: u32 = 0x577D_D202;
 pub const NVAPI_DRS_RESTORE_ALL_DEFAULTS: u32 = 0x5927_B094;
 
 // Official DRS Setting IDs (from NvApiDriverSettings.h)
-pub const DRS_LOW_LATENCY_MODE: u32 = 0x1083_5000;
+/// `PRERENDERLIMIT_ID`: what NVIDIA Control Panel's "Low Latency Mode" writes (0 = app, 1 = on).
+pub const DRS_PRERENDER_LIMIT: u32 = 0x007B_A09E;
 pub const DRS_MAX_FRAME_RATE: u32 = 0x1083_5002;
 pub const DRS_BG_MAX_FRAME_RATE: u32 = 0x1083_5004;
 pub const DRS_VSYNC_MODE: u32 = 0x00A8_79CF;
@@ -178,8 +181,8 @@ mod tests {
 
     #[test]
     fn drs_setting_dword_round_trip() {
-        let s = NvDrsSetting::new_dword(DRS_LOW_LATENCY_MODE, 2);
-        assert_eq!(s.setting_id, DRS_LOW_LATENCY_MODE);
+        let s = NvDrsSetting::new_dword(DRS_PRERENDER_LIMIT, 2);
+        assert_eq!(s.setting_id, DRS_PRERENDER_LIMIT);
         assert_eq!(s.current_dword(), 2);
     }
 }

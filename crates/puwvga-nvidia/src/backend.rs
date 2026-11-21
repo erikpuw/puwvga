@@ -270,6 +270,11 @@ impl NvidiaBackend {
             }
             let mut setting = Box::new(NvDrsSetting::new_dword(drs_id, dword_val));
             let st_set = unsafe { set_fn(session, profile, setting.as_mut()) };
+            if st_set == NVAPI_INVALID_USER_PRIVILEGE {
+                return Err(BackendError::AccessDenied(format!(
+                    "NVIDIA DRS setting 0x{drs_id:08X}"
+                )));
+            }
             if st_set != NVAPI_OK {
                 return Err(BackendError::DriverError {
                     code: st_set,
@@ -278,7 +283,7 @@ impl NvidiaBackend {
             }
             let st_save = unsafe { save(session) };
             if st_save != NVAPI_OK {
-                if st_save == -104 {
+                if st_save == -104 || st_save == NVAPI_INVALID_USER_PRIVILEGE {
                     return Err(BackendError::AccessDenied("NVIDIA DRS SaveSettings".into()));
                 }
                 return Err(BackendError::DriverError {
@@ -565,6 +570,8 @@ impl GpuBackend for NvidiaBackend {
 
 fn encode_drs_dword(setting_id: &str, ui_id: u32) -> u32 {
     match setting_id {
+        // Older presets stored 2 = "Ultra"; the driver has no separate Ultra key anymore.
+        "nv.low_latency" => u32::from(ui_id != 0),
         "nv.vsync" => match ui_id {
             0 => 0x0841_6747, // VSYNCMODE_PASSIVE (Use 3D app setting)
             1 => 0x4781_4940, // VSYNCMODE_FORCEOFF
@@ -579,6 +586,7 @@ fn encode_drs_dword(setting_id: &str, ui_id: u32) -> u32 {
 
 fn decode_drs_dword(setting_id: &str, raw: u32) -> u32 {
     match setting_id {
+        "nv.low_latency" => u32::from(raw != 0),
         "nv.vsync" => match raw {
             0x0841_6747 => 0,
             0x4781_4940 => 1,
@@ -594,6 +602,14 @@ fn decode_drs_dword(setting_id: &str, raw: u32) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn low_latency_maps_to_prerender_limit() {
+        assert_eq!(encode_drs_dword("nv.low_latency", 0), 0);
+        assert_eq!(encode_drs_dword("nv.low_latency", 1), 1);
+        assert_eq!(encode_drs_dword("nv.low_latency", 2), 1); // legacy "Ultra" preset
+        assert_eq!(decode_drs_dword("nv.low_latency", 3), 1);
+    }
 
     #[test]
     fn smoke_nvidia_nvapi_read_only() {
