@@ -1,0 +1,27 @@
+[package]
+name = "puwvga-installer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "puwvga-setup"
+path = "src/main.rs"
+
+[dependencies]
+eframe.workspace = true
+egui.workspace = true
+flate2 = "1.1"
+puwvga-win32 = { path = "../puwvga-win32" }
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Com",
+    "Win32_System_Registry",
+    "Win32_UI_Shell",
+    "Win32_UI_Shell_Common",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[build-dependencies]
+flate2 = "1.1"

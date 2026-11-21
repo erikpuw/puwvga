@@ -128,7 +128,7 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
     setting_card(
         ui,
         p,
-        "puwvga v0.1.0",
+        concat!("puwvga v", env!("CARGO_PKG_VERSION")),
         if is_vi {
             "Pure Rust · Static VC++ CRT · Không WebView · Không Telemetry · Không chạy nền"
         } else {

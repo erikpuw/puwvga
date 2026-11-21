@@ -383,10 +383,20 @@ fn nav_button(
     ui.add_space(3.0);
 }
 
+fn load_window_icon() -> egui::IconData {
+    const ICON_RGBA: &[u8] = include_bytes!("../../../assets/puwvga-icon.rgba");
+    egui::IconData {
+        rgba: ICON_RGBA.to_vec(),
+        width: 64,
+        height: 64,
+    }
+}
+
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("puwvga")
+            .with_icon(std::sync::Arc::new(load_window_icon()))
             .with_inner_size([1100.0, 700.0])
             .with_min_inner_size([880.0, 560.0]),
         ..Default::default()

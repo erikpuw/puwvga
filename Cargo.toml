@@ -7,13 +7,15 @@ members = [
     "crates/puwvga-nvidia",
     "crates/puwvga-amd",
     "crates/puwvga-ui",
+    "crates/puwvga-installer",
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "1.0.1"
 edition = "2024"
-license = "MIT"
-authors = ["puwvga"]
+license = "Apache-2.0"
+authors = ["erikpuw"]
+repository = "https://github.com/erikpuw/puwvga"
 
 [workspace.dependencies]
 serde = { version = "1.0", features = ["derive"] }

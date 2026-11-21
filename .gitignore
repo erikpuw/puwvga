@@ -1,4 +1,29 @@
+# Rust / Cargo build outputs
 /target
 **/*.rs.bk
 *.pdb
+*.res
+*.obj
+*.lib
+*.exp
+
+# Release & installer distribution artifacts (upload to GitHub Releases)
+/dist
+*.exe
+*.msi
+
+# Runtime user presets & logs
 puwvga.presets.json
+*.log
+
+# Internal design & planning scratch files
+/design-system
+/docs/superpowers
+/docs/mockups
+
+# Editor & OS junk
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
