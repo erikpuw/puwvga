@@ -242,10 +242,10 @@ impl eframe::App for PuwvgaApp {
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-        // Flush any pending preset changes, then exit immediately so Windows reclaims
-        // ControlLib.dll (IGCL) and nvapi64.dll handles without stalling the UI thread
-        // during synchronous ctlClose / NvAPI_Unload / FreeLibrary teardown.
+        // Flush pending preset changes, hide the window (DWM otherwise keeps the last frame
+        // ~500 ms after exit), then exit without the slow ctlClose / NvAPI_Unload teardown.
         self.state.auto_save_preset();
+        puwvga_win32::hide_process_windows();
         std::process::exit(0);
     }
 }
