@@ -179,7 +179,6 @@ pub struct DisplayModeSettings {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MuxMode {
-    Automatic,
     HybridOptimus,
     DiscreteGpuOnly,
 }

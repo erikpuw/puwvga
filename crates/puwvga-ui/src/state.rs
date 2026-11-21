@@ -1,7 +1,7 @@
 use puwvga_amd::AmdBackend;
 use puwvga_core::{
     BackendError, ColorSettings, DisplayModeSettings, DisplayOutputInfo, GpuAdapterInfo,
-    GpuBackend, GpuCapabilities, GpuId, GpuRole, Language, MuxMode, PresetBundle, PresetStore,
+    GpuBackend, GpuCapabilities, GpuId, GpuRole, Language, PresetBundle, PresetStore,
     ScalingMode, SettingDescriptor, SettingScope, SettingValue, SpanningConfig, SpanningLayout,
     ThemePreference, Vendor,
 };
@@ -9,8 +9,8 @@ use puwvga_intel::IntelBackend;
 use puwvga_nvidia::NvidiaBackend;
 use puwvga_win32::{
     apply_display_mode, apply_gamma_ramp, enumerate_active_displays, enumerate_dxgi_adapters,
-    is_apply_on_startup_enabled, is_windows_dark_mode, list_supported_modes,
-    read_gamma_ramp_estimate, set_apply_on_startup,
+    get_display_scaling, is_apply_on_startup_enabled, is_windows_dark_mode, list_supported_modes,
+    read_gamma_ramp_estimate, set_apply_on_startup, set_display_scaling,
 };
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -66,7 +66,6 @@ pub struct AppState {
     pub modes_by_device: BTreeMap<String, Vec<(u32, u32, u32)>>,
     pub display_settings_by_id: BTreeMap<String, DisplayModeSettings>,
     pub spanning_by_gpu: BTreeMap<GpuId, SpanningConfig>,
-    pub mux_mode: MuxMode,
 
     // Vendor-native 3D & Video descriptors for selected GPU + persistent overrides
     pub gfx_scope: SettingScope,
@@ -116,7 +115,6 @@ impl AppState {
             modes_by_device: BTreeMap::new(),
             display_settings_by_id: loaded.display_modes,
             spanning_by_gpu: BTreeMap::new(),
-            mux_mode: MuxMode::HybridOptimus,
             gfx_scope: SettingScope::Global,
             per_app_name: "cs2.exe".into(),
             show_legacy_nv: false,
@@ -244,16 +242,8 @@ impl AppState {
         for disp in &displays_snapshot {
             let modes = list_supported_modes(&disp.device_name);
             self.modes_by_device.insert(disp.device_name.clone(), modes);
-            self.display_settings_by_id
-                .entry(disp.id.clone())
-                .or_insert(DisplayModeSettings {
-                    width: disp.width,
-                    height: disp.height,
-                    refresh_hz: disp.refresh_hz,
-                    scaling: ScalingMode::AspectRatio,
-                    vrr_enabled: true,
-                    sharpness: Some(20),
-                });
+            let ds = self.read_display_settings(disp);
+            self.display_settings_by_id.insert(disp.id.clone(), ds);
 
             // Check if we already have saved color settings (by disp.id or by stable device_name fallback)
             let saved_color = self
@@ -344,6 +334,56 @@ impl AppState {
             .iter()
             .filter(|d| d.adapter_luid_low == gpu.luid_low && d.adapter_luid_high == gpu.luid_high)
             .collect()
+    }
+
+    /// Live display state: vendor fields from the backend, non-Intel scaling from Windows CCD.
+    pub fn read_display_settings(&self, disp: &DisplayOutputInfo) -> DisplayModeSettings {
+        let gpu = self.owner_gpu_for_display(disp);
+        let mut ds = gpu
+            .and_then(|g| self.backends.get(&g.vendor).and_then(|b| b.get_display(&g.id, disp).ok()))
+            .unwrap_or(DisplayModeSettings {
+                width: disp.width,
+                height: disp.height,
+                refresh_hz: disp.refresh_hz,
+                scaling: ScalingMode::AspectRatio,
+                vrr_enabled: false,
+                sharpness: None,
+            });
+        if gpu.map(|g| g.vendor) != Some(Vendor::Intel) {
+            if let Some(scaling) = get_display_scaling(&disp.device_name) {
+                ds.scaling = scaling;
+            }
+        }
+        ds
+    }
+
+    /// Applies a Display page change; on failure the page falls back to what the hardware reports.
+    pub fn apply_display_settings(
+        &mut self,
+        gpu: &GpuAdapterInfo,
+        disp: &DisplayOutputInfo,
+        prev: &DisplayModeSettings,
+        next: &DisplayModeSettings,
+    ) {
+        let mut res = Ok(());
+        if gpu.vendor != Vendor::Intel && next.scaling != prev.scaling {
+            res = set_display_scaling(&disp.device_name, next.scaling);
+        }
+        if res.is_ok() {
+            if let Some(backend) = self.backends.get(&gpu.vendor).cloned() {
+                res = backend.set_display(&gpu.id, disp, next);
+            }
+        }
+        if res.is_err() {
+            let live = self.read_display_settings(disp);
+            self.display_settings_by_id.insert(disp.id.clone(), live);
+        }
+        let msg = if self.language == Language::Vi {
+            "Đã áp dụng thiết lập hiển thị"
+        } else {
+            "Display settings applied"
+        };
+        self.handle_backend_result(res, msg);
     }
 
     pub fn select_gpu(&mut self, idx: usize) {

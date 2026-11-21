@@ -350,6 +350,107 @@ impl Default for CtlDisplayProperties {
     }
 }
 
+// Display scaling / sharpness, from igcl_api.h (bools are C `bool`, read as u8).
+pub const CTL_SCALING_TYPE_FLAG_CENTERED: u32 = 1 << 1;
+pub const CTL_SCALING_TYPE_FLAG_STRETCHED: u32 = 1 << 2;
+pub const CTL_SCALING_TYPE_FLAG_ASPECT_RATIO_CENTERED_MAX: u32 = 1 << 3;
+pub const CTL_RETRO_SCALING_TYPE_FLAG_INTEGER: u32 = 1 << 0;
+
+/// `ctl_scaling_settings_t`; the Intel sample sets `Version = 1`.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct CtlScalingSettings {
+    pub size: u32,
+    pub version: u8,
+    pub enable: u8,
+    pub scaling_type: u32,
+    pub custom_scaling_x: u32,
+    pub custom_scaling_y: u32,
+    pub hardware_mode_set: u8,
+    pub preferred_scaling_type: u32,
+}
+
+impl Default for CtlScalingSettings {
+    fn default() -> Self {
+        Self {
+            size: std::mem::size_of::<Self>() as u32,
+            version: 1,
+            enable: 0,
+            scaling_type: 0,
+            custom_scaling_x: 0,
+            custom_scaling_y: 0,
+            hardware_mode_set: 0,
+            preferred_scaling_type: 0,
+        }
+    }
+}
+
+/// `ctl_retro_scaling_settings_t` (adapter-wide integer / nearest-neighbour scaling).
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct CtlRetroScalingSettings {
+    pub size: u32,
+    pub version: u8,
+    pub get: u8,
+    pub enable: u8,
+    pub retro_scaling_type: u32,
+}
+
+impl Default for CtlRetroScalingSettings {
+    fn default() -> Self {
+        Self { size: std::mem::size_of::<Self>() as u32, version: 0, get: 0, enable: 0, retro_scaling_type: 0 }
+    }
+}
+
+/// `ctl_sharpness_caps_t`; `pFilterProperty` is left null, only `SupportedFilterFlags` is read.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct CtlSharpnessCaps {
+    pub size: u32,
+    pub version: u8,
+    pub supported_filter_flags: u32,
+    pub num_filter_types: u8,
+    pub p_filter_property: *mut c_void,
+}
+
+impl Default for CtlSharpnessCaps {
+    fn default() -> Self {
+        Self {
+            size: std::mem::size_of::<Self>() as u32,
+            version: 0,
+            supported_filter_flags: 0,
+            num_filter_types: 0,
+            p_filter_property: std::ptr::null_mut(),
+        }
+    }
+}
+
+/// `ctl_sharpness_settings_t`; `Intensity` is 0..=100 in the current driver implementation.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct CtlSharpnessSettings {
+    pub size: u32,
+    pub version: u8,
+    pub enable: u8,
+    pub filter_type: u32,
+    pub intensity: f32,
+}
+
+impl Default for CtlSharpnessSettings {
+    fn default() -> Self {
+        Self { size: std::mem::size_of::<Self>() as u32, version: 0, enable: 0, filter_type: 0, intensity: 0.0 }
+    }
+}
+
+pub type FnCtlScalingSettings =
+    unsafe extern "C" fn(CtlDisplayOutputHandle, *mut CtlScalingSettings) -> CtlResult;
+pub type FnCtlRetroScaling =
+    unsafe extern "C" fn(CtlDeviceAdapterHandle, *mut CtlRetroScalingSettings) -> CtlResult;
+pub type FnCtlSharpnessCaps =
+    unsafe extern "C" fn(CtlDisplayOutputHandle, *mut CtlSharpnessCaps) -> CtlResult;
+pub type FnCtlSharpnessSettings =
+    unsafe extern "C" fn(CtlDisplayOutputHandle, *mut CtlSharpnessSettings) -> CtlResult;
+
 pub type FnCtlGetDisplayProperties =
     unsafe extern "C" fn(CtlDisplayOutputHandle, *mut CtlDisplayProperties) -> CtlResult;
 pub type FnCtlGetBrightnessSetting =
@@ -376,6 +477,15 @@ pub fn format_igcl_driver_version(v: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn display_structs_match_igcl_layout() {
+        assert_eq!(std::mem::size_of::<CtlScalingSettings>(), 28);
+        assert_eq!(std::mem::offset_of!(CtlScalingSettings, preferred_scaling_type), 24);
+        assert_eq!(std::mem::size_of::<CtlRetroScalingSettings>(), 12);
+        assert_eq!(std::mem::size_of::<CtlSharpnessCaps>(), 24);
+        assert_eq!(std::mem::size_of::<CtlSharpnessSettings>(), 16);
+    }
 
     #[test]
     fn igcl_abi_struct_sizes_are_valid() {

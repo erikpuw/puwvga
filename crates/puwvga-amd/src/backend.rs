@@ -293,14 +293,14 @@ impl GpuBackend for AmdBackend {
     fn get_display(
         &self,
         _adapter: &GpuId,
-        _display_id: &str,
+        display: &DisplayOutputInfo,
     ) -> Result<DisplayModeSettings, BackendError> {
         Ok(DisplayModeSettings {
-            width: 0,
-            height: 0,
-            refresh_hz: 60,
+            width: display.width,
+            height: display.height,
+            refresh_hz: display.refresh_hz,
             scaling: ScalingMode::AspectRatio,
-            vrr_enabled: true,
+            vrr_enabled: false,
             sharpness: None,
         })
     }
@@ -308,9 +308,10 @@ impl GpuBackend for AmdBackend {
     fn set_display(
         &self,
         _adapter: &GpuId,
-        _display_id: &str,
+        _display: &DisplayOutputInfo,
         _settings: &DisplayModeSettings,
     ) -> Result<(), BackendError> {
+        // AMD scaling goes through Windows CCD; FreeSync is not wired to ADL yet (UI locks it).
         Ok(())
     }
 

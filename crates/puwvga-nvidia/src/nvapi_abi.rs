@@ -61,6 +61,8 @@ pub const DRS_TEX_TRILINEAR_OPT: u32 = 0x002E_CAF2;
 pub const DRS_THREADED_OPT: u32 = 0x20C1_221E;
 /// "Shader disk cache maximum size" in MB (0 = disabled, 0xFFFFFFFF = unlimited)
 pub const DRS_SHADER_CACHE_SIZE: u32 = 0x00AC_8497;
+/// "Enable G-SYNC globally" (VRR_MODE_ID: 0 = off, 1 = full screen only, 2 = full screen + windowed)
+pub const DRS_VRR_MODE: u32 = 0x1194_F158;
 /// "Override DLSS-SR presets" (A = 1 ... K = 11, 0x00FFFFFF = latest)
 pub const DRS_DLSS_SR_PRESET: u32 = 0x10E4_1DF3;
 /// "Enable DLSS-SR override": gate for the SR preset and performance mode overrides.

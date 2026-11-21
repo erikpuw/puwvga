@@ -6,7 +6,7 @@ use crate::nvapi_abi::*;
 use libloading::Library;
 use puwvga_core::{
     BackendError, ColorSettings, DisplayModeSettings, DisplayOutputInfo, GpuAdapterInfo, GpuBackend, GpuCapabilities,
-    GpuId, GpuRole, MuxMode, ScalingMode, SettingDescriptor, SettingScope, SettingValue,
+    GpuId, GpuRole, ScalingMode, SettingDescriptor, SettingScope, SettingValue,
     SpanningConfig, SpanningLayout, Vendor,
 };
 use std::collections::BTreeMap;
@@ -54,7 +54,6 @@ pub struct NvidiaBackend {
     settings_cache: Mutex<BTreeMap<String, SettingValue>>,
     color_cache: Mutex<BTreeMap<String, ColorSettings>>,
     spanning_cache: Mutex<SpanningConfig>,
-    mux_cache: Mutex<MuxMode>,
 }
 
 unsafe fn query_fn<T>(qi: FnQueryInterface, id: u32) -> Option<T> {
@@ -173,7 +172,6 @@ impl NvidiaBackend {
                 display_ids: Vec::new(),
                 bezel: Default::default(),
             }),
-            mux_cache: Mutex::new(MuxMode::HybridOptimus),
         })
     }
 
@@ -246,6 +244,31 @@ impl NvidiaBackend {
         unsafe {
             let _ = destroy(session);
         }
+    }
+
+    /// Reads one DWORD from the Global (base) profile; `None` when the key is not set.
+    fn read_drs_dword(rt: &NvRuntime, drs_id: u32) -> Option<u32> {
+        let (create, destroy, load, base_prof, get_fn) = (
+            rt.fn_drs_create?,
+            rt.fn_drs_destroy?,
+            rt.fn_drs_load?,
+            rt.fn_drs_base_profile?,
+            rt.fn_drs_get_setting?,
+        );
+        let mut session: NvDrsSessionHandle = std::ptr::null_mut();
+        if unsafe { create(&mut session) } != NVAPI_OK || session.is_null() {
+            return None;
+        }
+        let mut profile: NvDrsProfileHandle = std::ptr::null_mut();
+        let mut setting = Box::new(NvDrsSetting::new_dword(drs_id, 0));
+        let value = (unsafe { load(session) } == NVAPI_OK
+            && unsafe { base_prof(session, &mut profile) } == NVAPI_OK
+            && unsafe { get_fn(session, profile, drs_id, setting.as_mut()) } == NVAPI_OK)
+            .then(|| setting.current_dword());
+        unsafe {
+            let _ = destroy(session);
+        }
+        value
     }
 
     fn write_drs_dword(rt: &NvRuntime, drs_id: u32, dword_val: u32) -> Result<(), BackendError> {
@@ -440,24 +463,32 @@ impl GpuBackend for NvidiaBackend {
     fn get_display(
         &self,
         _adapter: &GpuId,
-        _display_id: &str,
+        display: &DisplayOutputInfo,
     ) -> Result<DisplayModeSettings, BackendError> {
-        Ok(DisplayModeSettings {
-            width: 0,
-            height: 0,
-            refresh_hz: 60,
+        let rt = self.runtime.lock().unwrap();
+        // An absent key means the driver default, VRR_MODE_FULLSCREEN_ONLY (on).
+        let vrr = Self::read_drs_dword(&rt, DRS_VRR_MODE).is_none_or(|v| v != 0);
+        Ok(DisplayModeSettings { vrr_enabled: vrr, ..DisplayModeSettings {
+            width: display.width,
+            height: display.height,
+            refresh_hz: display.refresh_hz,
             scaling: ScalingMode::AspectRatio,
-            vrr_enabled: true,
+            vrr_enabled: false,
             sharpness: None,
-        })
+        } })
     }
 
     fn set_display(
         &self,
-        _adapter: &GpuId,
-        _display_id: &str,
-        _settings: &DisplayModeSettings,
+        adapter: &GpuId,
+        display: &DisplayOutputInfo,
+        settings: &DisplayModeSettings,
     ) -> Result<(), BackendError> {
+        let current = self.get_display(adapter, display)?;
+        if settings.vrr_enabled != current.vrr_enabled {
+            let rt = self.runtime.lock().unwrap();
+            Self::write_drs_dword(&rt, DRS_VRR_MODE, u32::from(settings.vrr_enabled))?;
+        }
         Ok(())
     }
 
@@ -584,21 +615,6 @@ impl GpuBackend for NvidiaBackend {
             .lock()
             .unwrap()
             .insert(setting_id.to_string(), value.clone());
-        Ok(())
-    }
-
-    fn get_mux(&self, _adapter: &GpuId) -> Result<MuxMode, BackendError> {
-        if !self.is_laptop {
-            return Err(BackendError::Unsupported("MUX".into()));
-        }
-        Ok(*self.mux_cache.lock().unwrap())
-    }
-
-    fn set_mux(&self, _adapter: &GpuId, mode: MuxMode) -> Result<(), BackendError> {
-        if !self.is_laptop {
-            return Err(BackendError::Unsupported("MUX".into()));
-        }
-        *self.mux_cache.lock().unwrap() = mode;
         Ok(())
     }
 }

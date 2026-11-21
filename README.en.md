@@ -39,9 +39,10 @@ The application talks directly to the vendor libraries shipped with your graphic
 
 ### Display modes, spanning, and MUX
 
-- Change resolution, refresh rate, scaling mode, Intel Sharpness, and VRR / G-SYNC / FreeSync.
-- Switch MUX / Optimus display output mode on dual-GPU laptops.
-- Configure multi-display spanning (NVIDIA Mosaic/Surround, Intel Combined Display, AMD Eyefinity SLS) with an automatic 15-second revert timer if unconfirmed.
+- Change resolution and refresh rate (Windows CCD, with a 15-second auto-revert if unconfirmed).
+- Scaling: Intel goes through IGCL (including Retro/Integer Scaling), NVIDIA and AMD through Windows CCD. Intel Sharpness uses IGCL. NVIDIA G-SYNC uses DRS (`VRR_MODE`). Intel VRR and AMD FreeSync have no switch API wired yet, so they are locked.
+- Show the current MUX / Optimus routing on dual-GPU laptops. NVIDIA has no public API to switch the MUX, so this is read-only.
+- Multi-display spanning (NVIDIA Mosaic, Intel Combined Display, AMD Eyefinity) only previews the layout for now. The driver spanning calls have not been verified on a multi-monitor machine, so the switch is locked.
 
 ### Vendor-native 3D and Video settings
 

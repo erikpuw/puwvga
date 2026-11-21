@@ -19,6 +19,12 @@ struct IntelRuntime {
     fn_set_lace: Option<FnCtlSetLaceConfig>,
     fn_pixtx_get: Option<FnCtlPixelTransformationGetConfig>,
     fn_pixtx_set: Option<FnCtlPixelTransformationSetConfig>,
+    fn_scaling_get: Option<FnCtlScalingSettings>,
+    fn_scaling_set: Option<FnCtlScalingSettings>,
+    fn_retro_scaling: Option<FnCtlRetroScaling>,
+    fn_sharpness_caps: Option<FnCtlSharpnessCaps>,
+    fn_sharpness_get: Option<FnCtlSharpnessSettings>,
+    fn_sharpness_set: Option<FnCtlSharpnessSettings>,
     device_handles: Vec<CtlDeviceAdapterHandle>,
 }
 
@@ -113,6 +119,24 @@ impl IntelBackend {
             )
         };
 
+        let (
+            fn_scaling_get,
+            fn_scaling_set,
+            fn_retro_scaling,
+            fn_sharpness_caps,
+            fn_sharpness_get,
+            fn_sharpness_set,
+        ) = unsafe {
+            (
+                lib.get::<FnCtlScalingSettings>(b"ctlGetCurrentScaling\0").ok().map(|s| *s),
+                lib.get::<FnCtlScalingSettings>(b"ctlSetCurrentScaling\0").ok().map(|s| *s),
+                lib.get::<FnCtlRetroScaling>(b"ctlGetSetRetroScaling\0").ok().map(|s| *s),
+                lib.get::<FnCtlSharpnessCaps>(b"ctlGetSharpnessCaps\0").ok().map(|s| *s),
+                lib.get::<FnCtlSharpnessSettings>(b"ctlGetCurrentSharpness\0").ok().map(|s| *s),
+                lib.get::<FnCtlSharpnessSettings>(b"ctlSetCurrentSharpness\0").ok().map(|s| *s),
+            )
+        };
+
         let mut init_args = CtlInitArgs::default();
         let mut api_handle: CtlApiHandle = std::ptr::null_mut();
         let status = unsafe { fn_init(&mut init_args, &mut api_handle) };
@@ -143,6 +167,12 @@ impl IntelBackend {
                 fn_set_lace,
                 fn_pixtx_get,
                 fn_pixtx_set,
+                fn_scaling_get,
+                fn_scaling_set,
+                fn_retro_scaling,
+                fn_sharpness_caps,
+                fn_sharpness_get,
+                fn_sharpness_set,
                 device_handles: handles,
             }),
             settings_cache: Mutex::new(default_intel_values()),
@@ -156,8 +186,11 @@ impl IntelBackend {
         })
     }
 
-    /// Finds the IGCL output whose Windows encoder id equals the CCD target id of `display`.
-    fn display_handle(rt: &IntelRuntime, target_id: u32) -> Option<CtlDisplayOutputHandle> {
+    /// Finds the IGCL device and output whose Windows encoder id equals the CCD target id.
+    fn display_target(
+        rt: &IntelRuntime,
+        target_id: u32,
+    ) -> Option<(CtlDeviceAdapterHandle, CtlDisplayOutputHandle)> {
         let get_props = rt.fn_get_display_props?;
         rt.device_handles.iter().find_map(|&dev| {
             let mut count = 0u32;
@@ -170,11 +203,14 @@ impl IntelBackend {
                 return None;
             }
             displays.truncate(count as usize);
-            displays.into_iter().find(|&disp| {
-                let mut props = CtlDisplayProperties::default();
-                (unsafe { get_props(disp, &mut props) }) == CTL_RESULT_SUCCESS
-                    && props.os_display_encoder_id as u32 == target_id
-            })
+            displays
+                .into_iter()
+                .find(|&disp| {
+                    let mut props = CtlDisplayProperties::default();
+                    (unsafe { get_props(disp, &mut props) }) == CTL_RESULT_SUCCESS
+                        && props.os_display_encoder_id as u32 == target_id
+                })
+                .map(|disp| (dev, disp))
         })
     }
 }
@@ -255,7 +291,7 @@ impl GpuBackend for IntelBackend {
             });
 
         let rt = self.runtime.lock().unwrap();
-        if let Some(disp) = Self::display_handle(&rt, display.target_id) {
+        if let Some(disp) = Self::display_target(&rt, display.target_id).map(|(_, d)| d) {
             if let Some(get_lace) = rt.fn_get_lace {
                 let mut lace = CtlLaceConfig::default();
                 if unsafe { get_lace(disp, &mut lace) } == CTL_RESULT_SUCCESS {
@@ -273,7 +309,7 @@ impl GpuBackend for IntelBackend {
         settings: &ColorSettings,
     ) -> Result<(), BackendError> {
         let rt = self.runtime.lock().unwrap();
-        if let Some(disp) = Self::display_handle(&rt, display.target_id) {
+        if let Some(disp) = Self::display_target(&rt, display.target_id).map(|(_, d)| d) {
             if let (Some(set_lace), Some(enabled)) = (rt.fn_set_lace, settings.lace_enabled) {
                 let mut lace = CtlLaceConfig {
                     enabled,
@@ -330,24 +366,101 @@ impl GpuBackend for IntelBackend {
     fn get_display(
         &self,
         _adapter: &GpuId,
-        _display_id: &str,
+        display: &DisplayOutputInfo,
     ) -> Result<DisplayModeSettings, BackendError> {
-        Ok(DisplayModeSettings {
-            width: 0,
-            height: 0,
-            refresh_hz: 60,
+        let mut ds = DisplayModeSettings {
+            width: display.width,
+            height: display.height,
+            refresh_hz: display.refresh_hz,
             scaling: ScalingMode::AspectRatio,
-            vrr_enabled: true,
-            sharpness: Some(20),
-        })
+            vrr_enabled: false,
+            sharpness: None,
+        };
+        let rt = self.runtime.lock().unwrap();
+        let Some((dev, disp)) = Self::display_target(&rt, display.target_id) else {
+            return Ok(ds);
+        };
+        if let Some(get) = rt.fn_scaling_get {
+            // `PreferredScalingType` holds the mode in effect; `ScalingType` reads Identity at native.
+            let mut s = CtlScalingSettings::default();
+            if unsafe { get(disp, &mut s) } == CTL_RESULT_SUCCESS {
+                ds.scaling = scaling_from_igcl(s.preferred_scaling_type);
+            }
+        }
+        if let Some(retro) = rt.fn_retro_scaling {
+            let mut r = CtlRetroScalingSettings { get: 1, ..Default::default() };
+            if unsafe { retro(dev, &mut r) } == CTL_RESULT_SUCCESS
+                && r.enable != 0
+                && r.retro_scaling_type & CTL_RETRO_SCALING_TYPE_FLAG_INTEGER != 0
+            {
+                ds.scaling = ScalingMode::Integer;
+            }
+        }
+        if let Some(get) = rt.fn_sharpness_get {
+            let mut s = CtlSharpnessSettings::default();
+            if unsafe { get(disp, &mut s) } == CTL_RESULT_SUCCESS {
+                let level = if s.enable != 0 { s.intensity.round().clamp(0.0, 100.0) } else { 0.0 };
+                ds.sharpness = Some(level as u32);
+            }
+        }
+        Ok(ds)
     }
 
     fn set_display(
         &self,
-        _adapter: &GpuId,
-        _display_id: &str,
-        _settings: &DisplayModeSettings,
+        adapter: &GpuId,
+        display: &DisplayOutputInfo,
+        settings: &DisplayModeSettings,
     ) -> Result<(), BackendError> {
+        let current = self.get_display(adapter, display)?;
+        let rt = self.runtime.lock().unwrap();
+        let Some((dev, disp)) = Self::display_target(&rt, display.target_id) else {
+            return Err(BackendError::InvalidArgument(format!(
+                "{} is not driven by the Intel GPU",
+                display.device_name
+            )));
+        };
+        let check = |st: CtlResult, call: &str| {
+            if st == CTL_RESULT_SUCCESS {
+                Ok(())
+            } else {
+                Err(BackendError::DriverError { code: st as i32, message: format!("{call} failed") })
+            }
+        };
+        if settings.scaling != current.scaling {
+            // Integer (retro) scaling is adapter-wide; the other modes are per display.
+            let integer = settings.scaling == ScalingMode::Integer;
+            if let Some(retro) = rt.fn_retro_scaling {
+                if integer || current.scaling == ScalingMode::Integer {
+                    // IGCL rejects type 0; disabling keeps the INTEGER type and clears Enable.
+                    let mut r = CtlRetroScalingSettings {
+                        enable: u8::from(integer),
+                        retro_scaling_type: CTL_RETRO_SCALING_TYPE_FLAG_INTEGER,
+                        ..Default::default()
+                    };
+                    check(unsafe { retro(dev, &mut r) }, "ctlGetSetRetroScaling")?;
+                }
+            }
+            if let (Some(set), Some(flag)) = (rt.fn_scaling_set, igcl_scaling(settings.scaling)) {
+                let mut s = CtlScalingSettings { enable: 1, scaling_type: flag, ..Default::default() };
+                check(unsafe { set(disp, &mut s) }, "ctlSetCurrentScaling")?;
+            }
+        }
+        if let (Some(level), Some(caps), Some(set)) =
+            (settings.sharpness, rt.fn_sharpness_caps, rt.fn_sharpness_set)
+        {
+            if Some(level) != current.sharpness {
+                let mut c = CtlSharpnessCaps::default();
+                check(unsafe { caps(disp, &mut c) }, "ctlGetSharpnessCaps")?;
+                let mut s = CtlSharpnessSettings {
+                    enable: u8::from(level > 0),
+                    filter_type: c.supported_filter_flags,
+                    intensity: level.min(100) as f32,
+                    ..Default::default()
+                };
+                check(unsafe { set(disp, &mut s) }, "ctlSetCurrentSharpness")?;
+            }
+        }
         Ok(())
     }
 
@@ -680,9 +793,34 @@ fn build_intel_video_descriptors(cache: &BTreeMap<String, SettingValue>) -> Vec<
     ]
 }
 
+fn igcl_scaling(mode: ScalingMode) -> Option<u32> {
+    match mode {
+        ScalingMode::AspectRatio => Some(CTL_SCALING_TYPE_FLAG_ASPECT_RATIO_CENTERED_MAX),
+        ScalingMode::FullScreen => Some(CTL_SCALING_TYPE_FLAG_STRETCHED),
+        ScalingMode::Center => Some(CTL_SCALING_TYPE_FLAG_CENTERED),
+        ScalingMode::Integer => None,
+    }
+}
+
+fn scaling_from_igcl(flag: u32) -> ScalingMode {
+    match flag {
+        CTL_SCALING_TYPE_FLAG_STRETCHED => ScalingMode::FullScreen,
+        CTL_SCALING_TYPE_FLAG_CENTERED => ScalingMode::Center,
+        _ => ScalingMode::AspectRatio,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn igcl_scaling_round_trips() {
+        for m in [ScalingMode::AspectRatio, ScalingMode::FullScreen, ScalingMode::Center] {
+            assert_eq!(scaling_from_igcl(igcl_scaling(m).unwrap()), m);
+        }
+        assert!(igcl_scaling(ScalingMode::Integer).is_none());
+    }
 
     #[test]
     fn smoke_intel_igcl_read_only() {

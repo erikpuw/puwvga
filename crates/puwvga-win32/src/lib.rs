@@ -5,7 +5,8 @@ pub mod task_scheduler;
 pub mod theme;
 
 pub use display_ccd::{
-    apply_display_mode, dedup_and_sort_modes, enumerate_active_displays, list_supported_modes,
+    apply_display_mode, dedup_and_sort_modes, enumerate_active_displays, get_display_scaling,
+    list_supported_modes, set_display_scaling,
 };
 pub use dxgi::{enumerate_dxgi_adapters, DxgiAdapter};
 pub use gamma_ramp::{apply_gamma_ramp, build_gamma_ramp, read_gamma_ramp_estimate};

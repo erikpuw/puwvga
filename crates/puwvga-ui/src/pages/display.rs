@@ -171,20 +171,14 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
             state.apply_mode_with_revert(&disp.device_name, current_mode, chosen_mode);
         }
 
-        let mut disp_changed = false;
+        let mut change = None;
         if let Some(ds) = state.display_settings_by_id.get_mut(&disp.id) {
             let prev_ds = ds.clone();
             let scaling_text = match ds.scaling {
                 ScalingMode::AspectRatio => "Aspect Ratio",
                 ScalingMode::FullScreen => "Full-screen",
                 ScalingMode::Center => "Center",
-                ScalingMode::Integer => {
-                    if gpu.vendor == Vendor::Intel {
-                        "Retro Scaling (Integer)"
-                    } else {
-                        "Integer Scaling"
-                    }
-                }
+                ScalingMode::Integer => "Retro Scaling (Integer)",
             };
             setting_card(
                 ui,
@@ -211,23 +205,30 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
                                 "Full-screen",
                             );
                             ui.selectable_value(&mut ds.scaling, ScalingMode::Center, "Center");
-                            ui.selectable_value(
-                                &mut ds.scaling,
-                                ScalingMode::Integer,
-                                if gpu.vendor == Vendor::Intel {
-                                    "Retro Scaling (Integer)"
-                                } else {
-                                    "Integer Scaling"
-                                },
-                            );
+                            // Only Intel exposes integer scaling through a public API (IGCL retro scaling).
+                            if gpu.vendor == Vendor::Intel {
+                                ui.selectable_value(
+                                    &mut ds.scaling,
+                                    ScalingMode::Integer,
+                                    "Retro Scaling (Integer)",
+                                );
+                            }
                         });
                 },
             );
 
-            let vrr_label = match gpu.vendor {
-                Vendor::Nvidia => "G-SYNC / Adaptive Sync",
-                Vendor::Intel => "Variable Refresh Rate (VRR)",
-                Vendor::Amd => "AMD FreeSync",
+            let (vrr_label, vrr_lock) = match (gpu.vendor, is_vi) {
+                (Vendor::Nvidia, _) => ("G-SYNC / Adaptive Sync", None),
+                (Vendor::Intel, true) => (
+                    "Variable Refresh Rate (VRR)",
+                    Some("Intel IGCL không có API bật/tắt VRR theo màn hình. Bật trong Windows: Cài đặt > Màn hình > Đồ họa."),
+                ),
+                (Vendor::Intel, false) => (
+                    "Variable Refresh Rate (VRR)",
+                    Some("Intel IGCL has no per-display VRR switch. Use Windows Settings > Display > Graphics."),
+                ),
+                (Vendor::Amd, true) => ("AMD FreeSync", Some("Chưa nối FreeSync qua ADL.")),
+                (Vendor::Amd, false) => ("AMD FreeSync", Some("FreeSync is not wired to ADL yet.")),
             };
             setting_card_with_icon(
                 ui,
@@ -239,7 +240,7 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
                 } else {
                     "Eliminate screen tearing via adaptive sync"
                 },
-                None,
+                vrr_lock,
                 |ui| {
                     spring_toggle(ui, p, &mut ds.vrr_enabled);
                 },
@@ -267,15 +268,12 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
                 );
             }
             if *ds != prev_ds {
-                disp_changed = true;
+                change = Some((prev_ds, ds.clone()));
             }
         }
-        if disp_changed {
-            if let Some(ds_copy) = state.display_settings_by_id.get(&disp.id).cloned() {
-                state
-                    .display_settings_by_id
-                    .insert(disp.device_name.clone(), ds_copy);
-            }
+        if let Some((prev, next)) = change {
+            state.display_settings_by_id.insert(disp.device_name.clone(), next.clone());
+            state.apply_display_settings(&gpu, disp, &prev, &next);
             state.auto_save_preset();
         }
     } else {
@@ -511,7 +509,13 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
         } else {
             "Includes 15-second auto-revert safety fallback"
         },
-        None,
+        // Driver spanning calls are not wired yet: they rebuild the display topology and need a
+        // multi-monitor machine to verify, so the switch stays locked instead of faking success.
+        Some(if is_vi {
+            "Chưa hỗ trợ: ghép màn hình qua driver chưa được kiểm chứng trên máy nhiều màn hình."
+        } else {
+            "Not supported yet: driver spanning has not been verified on a multi-monitor machine."
+        }),
         |ui| {
             if cfg.enabled {
                 if ui.button(tr(lang, TextKey::DisableSpanning)).clicked() {

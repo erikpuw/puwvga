@@ -1,10 +1,13 @@
-use puwvga_core::{BackendError, DisplayOutputInfo};
+use puwvga_core::{BackendError, DisplayOutputInfo, ScalingMode};
 use std::collections::BTreeSet;
 use std::mem::size_of;
 use windows::core::PCWSTR;
 use windows::Win32::Devices::Display::{
-    DisplayConfigGetDeviceInfo, GetDisplayConfigBufferSizes, QueryDisplayConfig,
-    DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO,
+    DisplayConfigGetDeviceInfo, GetDisplayConfigBufferSizes, QueryDisplayConfig, SetDisplayConfig,
+    DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO, DISPLAYCONFIG_SCALING,
+    DISPLAYCONFIG_SCALING_ASPECTRATIOCENTEREDMAX, DISPLAYCONFIG_SCALING_CENTERED,
+    DISPLAYCONFIG_SCALING_STRETCHED, SDC_ALLOW_CHANGES, SDC_APPLY, SDC_SAVE_TO_DATABASE,
+    SDC_USE_SUPPLIED_DISPLAY_CONFIG,
     DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME, DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME,
     DISPLAYCONFIG_DEVICE_INFO_HEADER, DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO,
     DISPLAYCONFIG_MODE_INFO, DISPLAYCONFIG_MODE_INFO_TYPE_SOURCE, DISPLAYCONFIG_PATH_INFO,
@@ -28,63 +31,15 @@ fn to_wide_null(s: &str) -> Vec<u16> {
 
 /// Enumerates all active displays using Win32 CCD API, mapping each display to its owning GPU LUID.
 pub fn enumerate_active_displays() -> Result<Vec<DisplayOutputInfo>, BackendError> {
-    let mut path_count = 0u32;
-    let mut mode_count = 0u32;
-
-    let err = unsafe {
-        GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &mut path_count, &mut mode_count)
-    };
-    if err != ERROR_SUCCESS {
-        return Err(BackendError::DriverError {
-            code: err.0 as i32,
-            message: format!("GetDisplayConfigBufferSizes failed: {:?}", err),
-        });
-    }
-
-    let mut paths = vec![DISPLAYCONFIG_PATH_INFO::default(); path_count as usize];
-    let mut modes = vec![DISPLAYCONFIG_MODE_INFO::default(); mode_count as usize];
-
-    let err = unsafe {
-        QueryDisplayConfig(
-            QDC_ONLY_ACTIVE_PATHS,
-            &mut path_count,
-            paths.as_mut_ptr(),
-            &mut mode_count,
-            modes.as_mut_ptr(),
-            None,
-        )
-    };
-    if err != ERROR_SUCCESS {
-        return Err(BackendError::DriverError {
-            code: err.0 as i32,
-            message: format!("QueryDisplayConfig failed: {:?}", err),
-        });
-    }
-    paths.truncate(path_count as usize);
-    modes.truncate(mode_count as usize);
-
+    let (paths, modes) = query_active_config()?;
     let mut displays = Vec::new();
 
     for (idx, path) in paths.iter().enumerate() {
         let adapter_luid: LUID = path.sourceInfo.adapterId;
 
         // 1. Source GDI device name (e.g. \\.\DISPLAY1)
-        let mut src_name = DISPLAYCONFIG_SOURCE_DEVICE_NAME {
-            header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
-                r#type: DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME,
-                size: size_of::<DISPLAYCONFIG_SOURCE_DEVICE_NAME>() as u32,
-                adapterId: adapter_luid,
-                id: path.sourceInfo.id,
-            },
-            ..Default::default()
-        };
         let device_name =
-            if unsafe { DisplayConfigGetDeviceInfo(&mut src_name.header) } == ERROR_SUCCESS.0 as i32
-            {
-                wide_to_string(&src_name.viewGdiDeviceName)
-            } else {
-                format!("\\\\.\\DISPLAY{}", idx + 1)
-            };
+            source_gdi_name(path).unwrap_or_else(|| format!("\\\\.\\DISPLAY{}", idx + 1));
 
         // 2. Target friendly monitor name
         let mut tgt_name = DISPLAYCONFIG_TARGET_DEVICE_NAME {
@@ -179,6 +134,111 @@ pub fn enumerate_active_displays() -> Result<Vec<DisplayOutputInfo>, BackendErro
     }
 
     Ok(displays)
+}
+
+/// Active CCD paths and modes (`QDC_ONLY_ACTIVE_PATHS`).
+fn query_active_config()
+-> Result<(Vec<DISPLAYCONFIG_PATH_INFO>, Vec<DISPLAYCONFIG_MODE_INFO>), BackendError> {
+    let mut path_count = 0u32;
+    let mut mode_count = 0u32;
+    let err = unsafe {
+        GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &mut path_count, &mut mode_count)
+    };
+    if err != ERROR_SUCCESS {
+        return Err(BackendError::DriverError {
+            code: err.0 as i32,
+            message: format!("GetDisplayConfigBufferSizes failed: {:?}", err),
+        });
+    }
+    let mut paths = vec![DISPLAYCONFIG_PATH_INFO::default(); path_count as usize];
+    let mut modes = vec![DISPLAYCONFIG_MODE_INFO::default(); mode_count as usize];
+    let err = unsafe {
+        QueryDisplayConfig(
+            QDC_ONLY_ACTIVE_PATHS,
+            &mut path_count,
+            paths.as_mut_ptr(),
+            &mut mode_count,
+            modes.as_mut_ptr(),
+            None,
+        )
+    };
+    if err != ERROR_SUCCESS {
+        return Err(BackendError::DriverError {
+            code: err.0 as i32,
+            message: format!("QueryDisplayConfig failed: {:?}", err),
+        });
+    }
+    paths.truncate(path_count as usize);
+    modes.truncate(mode_count as usize);
+    Ok((paths, modes))
+}
+
+/// GDI source name (`\\.\DISPLAYn`) of a CCD path.
+fn source_gdi_name(path: &DISPLAYCONFIG_PATH_INFO) -> Option<String> {
+    let mut src_name = DISPLAYCONFIG_SOURCE_DEVICE_NAME {
+        header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
+            r#type: DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME,
+            size: size_of::<DISPLAYCONFIG_SOURCE_DEVICE_NAME>() as u32,
+            adapterId: path.sourceInfo.adapterId,
+            id: path.sourceInfo.id,
+        },
+        ..Default::default()
+    };
+    (unsafe { DisplayConfigGetDeviceInfo(&mut src_name.header) } == ERROR_SUCCESS.0 as i32)
+        .then(|| wide_to_string(&src_name.viewGdiDeviceName))
+}
+
+/// CCD scaling for a UI mode. Integer scaling is vendor-specific and has no CCD value.
+fn ccd_scaling(mode: ScalingMode) -> Option<DISPLAYCONFIG_SCALING> {
+    match mode {
+        ScalingMode::AspectRatio => Some(DISPLAYCONFIG_SCALING_ASPECTRATIOCENTEREDMAX),
+        ScalingMode::FullScreen => Some(DISPLAYCONFIG_SCALING_STRETCHED),
+        ScalingMode::Center => Some(DISPLAYCONFIG_SCALING_CENTERED),
+        ScalingMode::Integer => None,
+    }
+}
+
+/// Identity (native) and "preferred" both mean the driver default, shown as Aspect Ratio.
+fn scaling_from_ccd(value: DISPLAYCONFIG_SCALING) -> ScalingMode {
+    match value {
+        DISPLAYCONFIG_SCALING_STRETCHED => ScalingMode::FullScreen,
+        DISPLAYCONFIG_SCALING_CENTERED => ScalingMode::Center,
+        _ => ScalingMode::AspectRatio,
+    }
+}
+
+/// Current Windows scaling of one display (`DISPLAYCONFIG_PATH_TARGET_INFO.scaling`).
+pub fn get_display_scaling(device_name: &str) -> Option<ScalingMode> {
+    let (paths, _) = query_active_config().ok()?;
+    paths
+        .iter()
+        .find(|p| source_gdi_name(p).as_deref() == Some(device_name))
+        .map(|p| scaling_from_ccd(p.targetInfo.scaling))
+}
+
+/// Sets Windows scaling for one display through `SetDisplayConfig`, keeping every other path as is.
+pub fn set_display_scaling(device_name: &str, mode: ScalingMode) -> Result<(), BackendError> {
+    let Some(value) = ccd_scaling(mode) else {
+        return Ok(());
+    };
+    let (mut paths, modes) = query_active_config()?;
+    let Some(path) = paths
+        .iter_mut()
+        .find(|p| source_gdi_name(p).as_deref() == Some(device_name))
+    else {
+        return Err(BackendError::InvalidArgument(format!("{device_name} is not active")));
+    };
+    path.targetInfo.scaling = value;
+    let flags = SDC_APPLY | SDC_USE_SUPPLIED_DISPLAY_CONFIG | SDC_SAVE_TO_DATABASE | SDC_ALLOW_CHANGES;
+    let st = unsafe { SetDisplayConfig(Some(&paths), Some(&modes), flags) };
+    if st == ERROR_SUCCESS.0 as i32 {
+        Ok(())
+    } else {
+        Err(BackendError::DriverError {
+            code: st,
+            message: format!("SetDisplayConfig(scaling {}) failed for {device_name}", value.0),
+        })
+    }
 }
 
 fn query_current_hz(device_name: &str) -> Option<u32> {
@@ -288,6 +348,14 @@ pub fn apply_display_mode(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ccd_scaling_round_trips_for_windows_modes() {
+        for m in [ScalingMode::AspectRatio, ScalingMode::FullScreen, ScalingMode::Center] {
+            assert_eq!(scaling_from_ccd(ccd_scaling(m).unwrap()), m);
+        }
+        assert!(ccd_scaling(ScalingMode::Integer).is_none());
+    }
 
     #[test]
     fn dedup_and_sort_orders_highest_resolution_and_hz_first() {

@@ -39,9 +39,10 @@
 
 ### Màn hình, ghép màn hình và MUX
 
-- Đổi độ phân giải, tần số quét, chế độ Scaling, Sharpness (Intel) và VRR / G-SYNC / FreeSync.
-- Chuyển chế độ xuất hình MUX / Optimus trên laptop có 2 GPU.
-- Ghép nhiều màn hình (NVIDIA Mosaic/Surround, Intel Combined Display, AMD Eyefinity SLS) kèm bộ đếm ngược tự hoàn tác 15 giây nếu người dùng chưa xác nhận.
+- Đổi độ phân giải và tần số quét (Windows CCD, tự hoàn tác sau 15 giây nếu chưa xác nhận).
+- Scaling: Intel đi qua IGCL (gồm Retro/Integer Scaling), NVIDIA và AMD đi qua Windows CCD. Sharpness cho Intel qua IGCL. G-SYNC cho NVIDIA qua DRS (`VRR_MODE`). VRR trên Intel và FreeSync trên AMD chưa có API để bật tắt nên đang khóa.
+- Hiển thị chế độ xuất hình MUX / Optimus hiện tại trên laptop 2 GPU. NVIDIA không có API công khai để đổi MUX, nên mục này chỉ đọc.
+- Ghép nhiều màn hình (NVIDIA Mosaic, Intel Combined Display, AMD Eyefinity) mới có phần xem trước bố cục. Lệnh ghép qua driver chưa được kiểm chứng trên máy nhiều màn hình nên đang khóa.
 
 ### Cấu hình 3D và Video theo từng hãng
 

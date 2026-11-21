@@ -2,7 +2,7 @@ use crate::state::AppState;
 use crate::theme::{vendor_color, Palette};
 use crate::widgets::{metric_box, pill_badge, section_header, setting_card_with_icon, vendor_dot, IconKind};
 use egui::{CornerRadius, Frame, Margin, RichText, Stroke, Ui};
-use puwvga_core::{tr, GpuAdapterInfo, Language, MuxMode, TextKey, Vendor};
+use puwvga_core::{tr, GpuAdapterInfo, GpuRole, Language, MuxMode, TextKey};
 
 pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
     let lang = state.language;
@@ -81,54 +81,38 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
     );
 
     if adapters.len() > 1 {
-        let mut selected = state.mux_mode;
+        // No public NVIDIA API switches the MUX, so this only reports the current routing:
+        // displays driven by the dGPU and none by the iGPU means dGPU-only.
+        let routed_to = |role: GpuRole| {
+            state
+                .displays
+                .iter()
+                .any(|d| state.owner_gpu_for_display(d).is_some_and(|g| g.role == role))
+        };
+        let mode = if routed_to(GpuRole::Discrete) && !routed_to(GpuRole::Integrated) {
+            MuxMode::DiscreteGpuOnly
+        } else {
+            MuxMode::HybridOptimus
+        };
         setting_card_with_icon(
             ui,
             p,
             IconKind::List,
             "Display Mode (MUX / Optimus)",
             if is_vi {
-                "Chuyển chế độ xuất hình giữa iGPU tiết kiệm điện và dGPU trực tiếp"
+                "Chế độ xuất hình hiện tại, suy ra từ màn hình đang nối vào iGPU hay dGPU"
             } else {
-                "Switch display routing between hybrid Optimus and dGPU-only"
+                "Current display routing, derived from which GPU drives the displays"
             },
-            None,
+            Some(if is_vi {
+                "Chỉ hiển thị: NVIDIA không có API công khai để đổi MUX. Đổi trong NVIDIA App hoặc BIOS."
+            } else {
+                "Read-only: NVIDIA has no public API to switch the MUX. Change it in NVIDIA App or BIOS."
+            }),
             |ui| {
-                egui::ComboBox::from_id_salt("dash_mux")
-                    .selected_text(mux_label(selected))
-                    .show_ui(ui, |ui| {
-                        ui.selectable_value(
-                            &mut selected,
-                            MuxMode::Automatic,
-                            mux_label(MuxMode::Automatic),
-                        );
-                        ui.selectable_value(
-                            &mut selected,
-                            MuxMode::HybridOptimus,
-                            mux_label(MuxMode::HybridOptimus),
-                        );
-                        ui.selectable_value(
-                            &mut selected,
-                            MuxMode::DiscreteGpuOnly,
-                            mux_label(MuxMode::DiscreteGpuOnly),
-                        );
-                    });
+                ui.label(mux_label(mode));
             },
         );
-        if selected != state.mux_mode {
-            state.mux_mode = selected;
-            if let Some(nv_gpu) = state
-                .adapters
-                .iter()
-                .find(|g| g.vendor == Vendor::Nvidia)
-                .cloned()
-            {
-                if let Some(b) = state.backends.get(&Vendor::Nvidia).cloned() {
-                    let res = b.set_mux(&nv_gpu.id, selected);
-                    state.handle_backend_result(res, "Đã cập nhật Display Mode (MUX)");
-                }
-            }
-        }
     } else if let Some(gpu) = adapters.first() {
         let disp_desc = state
             .displays
@@ -236,7 +220,6 @@ fn render_gpu_panel(
 
 fn mux_label(mode: MuxMode) -> &'static str {
     match mode {
-        MuxMode::Automatic => "Automatic Select (Advanced Optimus)",
         MuxMode::HybridOptimus => "Optimus (iGPU + dGPU)",
         MuxMode::DiscreteGpuOnly => "Discrete GPU Only",
     }

@@ -1,5 +1,5 @@
 use crate::model::{
-    ColorSettings, DisplayModeSettings, DisplayOutputInfo, GpuAdapterInfo, GpuId, MuxMode, SettingDescriptor,
+    ColorSettings, DisplayModeSettings, DisplayOutputInfo, GpuAdapterInfo, GpuId, SettingDescriptor,
     SettingScope, SettingValue, SpanningConfig, Vendor,
 };
 use thiserror::Error;
@@ -38,16 +38,19 @@ pub trait GpuBackend: Send + Sync {
         settings: &ColorSettings,
     ) -> Result<(), BackendError>;
 
+    /// Vendor-owned display state: VRR, sharpness, and (Intel) scaling incl. integer scaling.
+    /// Resolution/refresh and non-Intel scaling go through Windows CCD in the UI layer.
     fn get_display(
         &self,
         adapter: &GpuId,
-        display_id: &str,
+        display: &DisplayOutputInfo,
     ) -> Result<DisplayModeSettings, BackendError>;
 
+    /// Writes only the vendor-owned fields that differ from the current hardware state.
     fn set_display(
         &self,
         adapter: &GpuId,
-        display_id: &str,
+        display: &DisplayOutputInfo,
         settings: &DisplayModeSettings,
     ) -> Result<(), BackendError>;
 
@@ -90,13 +93,4 @@ pub trait GpuBackend: Send + Sync {
         value: &SettingValue,
     ) -> Result<(), BackendError>;
 
-    fn get_mux(&self, adapter: &GpuId) -> Result<MuxMode, BackendError> {
-        let _ = adapter;
-        Err(BackendError::Unsupported("MUX".into()))
-    }
-
-    fn set_mux(&self, adapter: &GpuId, mode: MuxMode) -> Result<(), BackendError> {
-        let _ = (adapter, mode);
-        Err(BackendError::Unsupported("MUX".into()))
-    }
 }
