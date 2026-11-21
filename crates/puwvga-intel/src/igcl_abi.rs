@@ -147,6 +147,8 @@ impl Default for CtlSetBrightness {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
+/// LACE request. The shipping ControlLib accepts this 24-byte layout (aggressiveness at offset 20);
+/// the 40-byte layout from the current header is rejected with 0x40000009 on driver 32.0.101.6881.
 pub struct CtlLaceConfig {
     pub size: u32,
     pub version: u8,
@@ -277,6 +279,9 @@ impl Default for CtlPixtxPipeSetConfig {
     }
 }
 
+pub const CTL_GET_OPERATION_FLAG_CURRENT: u32 = 1 << 0;
+pub const CTL_SET_OPERATION_CUSTOM: u32 = 1;
+pub const CTL_LACE_TRIGGER_FLAG_FIXED_AGGRESSIVENESS: u32 = 1 << 1;
 pub const CTL_PIXTX_BLOCK_TYPE_3X3_MATRIX: u32 = 3;
 pub const CTL_PIXTX_BLOCK_TYPE_3X3_MATRIX_AND_OFFSETS: u32 = 4;
 pub const CTL_PIXTX_CONFIG_QUERY_TYPE_CAPABILITY: u32 = 0;
@@ -286,8 +291,10 @@ pub const CTL_PIXTX_CONFIG_OPER_TYPE_SET_CUSTOM: u32 = 2;
 
 /// Builds a 3x3 Color Space Conversion (CSC) matrix for Saturation (0.0..=100.0, neutral 50.0)
 /// and Hue (-180.0..=180.0, neutral 0.0) using BT.709 luma weights.
+/// Hue/saturation matrix for the `3X3_MATRIX` (HueSat) block. Intel's sample clamps saturation to
+/// 0.75..=1.25, so the UI 0..=100 range maps onto that window with 50 as identity.
 pub fn build_csc_matrix(saturation_pct: f32, hue_deg: f32) -> [[f64; 3]; 3] {
-    let s = (saturation_pct.clamp(0.0, 100.0) as f64) / 50.0;
+    let s = 0.75 + (saturation_pct.clamp(0.0, 100.0) as f64) / 100.0 * 0.5;
     let theta = (hue_deg.clamp(-180.0, 180.0) as f64).to_radians();
     let cos_h = theta.cos() * s;
     let sin_h = theta.sin() * s;

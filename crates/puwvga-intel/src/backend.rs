@@ -186,6 +186,34 @@ impl IntelBackend {
         })
     }
 
+    fn current_lace(rt: &IntelRuntime, disp: CtlDisplayOutputHandle) -> Option<CtlLaceConfig> {
+        let get = rt.fn_get_lace?;
+        let mut lace = CtlLaceConfig { op_type_get: CTL_GET_OPERATION_FLAG_CURRENT, ..Default::default() };
+        (unsafe { get(disp, &mut lace) } == CTL_RESULT_SUCCESS).then_some(lace)
+    }
+
+    /// The pipeline's `3X3_MATRIX` block, which Intel's color sample uses for hue/saturation
+    /// (the `3X3_MATRIX_AND_OFFSETS` block is the linear-space CSC between DeGamma and Gamma).
+    fn hue_sat_block(rt: &IntelRuntime, disp: CtlDisplayOutputHandle) -> Option<CtlPixtxBlockConfig> {
+        let get = rt.fn_pixtx_get?;
+        let mut caps = CtlPixtxPipeGetConfig {
+            oper_type: CTL_PIXTX_CONFIG_QUERY_TYPE_CAPABILITY,
+            ..Default::default()
+        };
+        if unsafe { get(disp, &mut caps) } != CTL_RESULT_SUCCESS || !(1..=32).contains(&caps.num_blocks) {
+            return None;
+        }
+        let mut blocks = vec![CtlPixtxBlockConfig::default(); caps.num_blocks as usize];
+        caps.p_block_configs = blocks.as_mut_ptr();
+        if unsafe { get(disp, &mut caps) } != CTL_RESULT_SUCCESS {
+            return None;
+        }
+        blocks
+            .into_iter()
+            .find(|b| b.block_type == CTL_PIXTX_BLOCK_TYPE_3X3_MATRIX)
+            .map(|b| CtlPixtxBlockConfig { size: std::mem::size_of::<CtlPixtxBlockConfig>() as u32, ..b })
+    }
+
     /// Finds the IGCL device and output whose Windows encoder id equals the CCD target id.
     fn display_target(
         rt: &IntelRuntime,
@@ -292,11 +320,8 @@ impl GpuBackend for IntelBackend {
 
         let rt = self.runtime.lock().unwrap();
         if let Some(disp) = Self::display_target(&rt, display.target_id).map(|(_, d)| d) {
-            if let Some(get_lace) = rt.fn_get_lace {
-                let mut lace = CtlLaceConfig::default();
-                if unsafe { get_lace(disp, &mut lace) } == CTL_RESULT_SUCCESS {
-                    color.lace_enabled = Some(lace.enabled);
-                }
+            if let Some(lace) = Self::current_lace(&rt, disp) {
+                color.lace_enabled = Some(lace.enabled);
             }
         }
         Ok(color)
@@ -310,52 +335,42 @@ impl GpuBackend for IntelBackend {
     ) -> Result<(), BackendError> {
         let rt = self.runtime.lock().unwrap();
         if let Some(disp) = Self::display_target(&rt, display.target_id).map(|(_, d)| d) {
+            let check = |st: CtlResult, call: &str| {
+                if st == CTL_RESULT_SUCCESS {
+                    Ok(())
+                } else {
+                    Err(BackendError::DriverError { code: st as i32, message: format!("{call} failed") })
+                }
+            };
             if let (Some(set_lace), Some(enabled)) = (rt.fn_set_lace, settings.lace_enabled) {
-                let mut lace = CtlLaceConfig {
-                    enabled,
-                    ..Default::default()
-                };
-                let _ = unsafe { set_lace(disp, &mut lace) };
-            }
-            if let (Some(pixtx_get), Some(pixtx_set)) = (rt.fn_pixtx_get, rt.fn_pixtx_set) {
-                let mut pipe_get = CtlPixtxPipeGetConfig {
-                    oper_type: CTL_PIXTX_CONFIG_QUERY_TYPE_CAPABILITY,
-                    ..Default::default()
-                };
-                let status_count = unsafe { pixtx_get(disp, &mut pipe_get) };
-                if status_count == CTL_RESULT_SUCCESS && pipe_get.num_blocks > 0 && pipe_get.num_blocks <= 32 {
-                    let mut blocks = vec![CtlPixtxBlockConfig::default(); pipe_get.num_blocks as usize];
-                    pipe_get.p_block_configs = blocks.as_mut_ptr();
-                    if unsafe { pixtx_get(disp, &mut pipe_get) } == CTL_RESULT_SUCCESS {
-                        if let Some(csc_blk) = blocks.iter().find(|b| {
-                            b.block_type == CTL_PIXTX_BLOCK_TYPE_3X3_MATRIX_AND_OFFSETS
-                                || b.block_type == CTL_PIXTX_BLOCK_TYPE_3X3_MATRIX
-                        }) {
-                            let mut set_blk = CtlPixtxBlockConfig {
-                                block_id: csc_blk.block_id,
-                                block_type: csc_blk.block_type,
-                                matrix_config: CtlPixtxMatrixConfig {
-                                    matrix: build_csc_matrix(
-                                        settings.vibrance_or_saturation,
-                                        settings.hue,
-                                    ),
-                                    ..Default::default()
-                                },
-                                ..Default::default()
-                            };
-                            let mut pipe_set = CtlPixtxPipeSetConfig {
-                                oper_type: CTL_PIXTX_CONFIG_OPER_TYPE_SET_CUSTOM,
-                                flags: 0,
-                                num_blocks: 1,
-                                p_block_configs: &mut set_blk,
-                                ..Default::default()
-                            };
-                            let _ = unsafe { pixtx_set(disp, &mut pipe_set) };
-                        }
-                    }
+                let current = Self::current_lace(&rt, disp);
+                if current.map(|l| l.enabled) != Some(enabled) {
+                    let mut lace = CtlLaceConfig {
+                        enabled,
+                        op_type_set: CTL_SET_OPERATION_CUSTOM,
+                        trigger: CTL_LACE_TRIGGER_FLAG_FIXED_AGGRESSIVENESS,
+                        aggressiveness_percent: current
+                            .map(|l| l.aggressiveness_percent)
+                            .filter(|&a| a > 0)
+                            .unwrap_or(50),
+                        ..Default::default()
+                    };
+                    check(unsafe { set_lace(disp, &mut lace) }, "ctlSetLACEConfig")?;
                 }
             }
+            if let (Some(set), Some(mut block)) = (rt.fn_pixtx_set, Self::hue_sat_block(&rt, disp)) {
+                block.matrix_config.matrix =
+                    build_csc_matrix(settings.vibrance_or_saturation, settings.hue);
+                let mut pipe = CtlPixtxPipeSetConfig {
+                    oper_type: CTL_PIXTX_CONFIG_OPER_TYPE_SET_CUSTOM,
+                    num_blocks: 1,
+                    p_block_configs: &mut block,
+                    ..Default::default()
+                };
+                check(unsafe { set(disp, &mut pipe) }, "ctlPixelTransformationSetConfig")?;
+            }
         }
+        drop(rt);
         self.color_cache
             .lock()
             .unwrap()
