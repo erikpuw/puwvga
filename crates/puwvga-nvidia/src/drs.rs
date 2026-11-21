@@ -58,23 +58,29 @@ pub fn default_nvidia_values(gpu_name: &str) -> BTreeMap<String, SettingValue> {
 pub fn drs_id_for_setting(setting_id: &str) -> Option<u32> {
     match setting_id {
         "nv.dlss_preset" => Some(DRS_DLSS_SR_PRESET),
-        "nv.dlss_fg" => Some(DRS_DLSS_FG_OVERRIDE),
-        "nv.dlss_sr" => Some(DRS_DLSS_SR_OVERRIDE),
         "nv.low_latency" => Some(DRS_PRERENDER_LIMIT),
-        "nv.cuda_fallback" => Some(DRS_CUDA_SYSMEM_FALLBACK),
         "nv.max_fps" => Some(DRS_MAX_FRAME_RATE),
         "nv.power_mode" => Some(DRS_POWER_MANAGEMENT),
         "nv.shader_cache" => Some(DRS_SHADER_CACHE_SIZE),
         "nv.vsync" => Some(DRS_VSYNC_MODE),
-        "nv.af" => Some(DRS_ANISO_FILTERING),
+        "nv.af" => Some(DRS_ANISO_LEVEL),
         "nv.fxaa" => Some(DRS_FXAA_ENABLE),
-        "nv.bg_max_fps" => Some(DRS_BG_MAX_FRAME_RATE),
+        "nv.bg_max_fps" => Some(DRS_IDLE_MAX_FRAME_RATE),
         "nv.tex_aniso_opt" => Some(DRS_TEX_ANISO_OPT),
         "nv.tex_lod_bias" => Some(DRS_TEX_NEG_LOD_BIAS),
         "nv.tex_quality" => Some(DRS_TEX_QUALITY),
         "nv.tex_trilinear" => Some(DRS_TEX_TRILINEAR_OPT),
         "nv.threaded_opt" => Some(DRS_THREADED_OPT),
         _ => None,
+    }
+}
+
+/// The driver does not expose a DRS key that matches this control, so it stays read-only
+/// rather than writing a guessed ID.
+fn unverified_drs_lock() -> SettingLockReason {
+    SettingLockReason {
+        vi: "Driver NVIDIA hiện tại không có khóa DRS khớp với mục này".into(),
+        en: "The current NVIDIA driver exposes no matching DRS key for this control".into(),
     }
 }
 
@@ -125,8 +131,8 @@ pub fn build_nvidia_3d_descriptors(
             ]),
             value: get("nv.dlss_fg", SettingValue::EnumId(0)),
             default_value: SettingValue::EnumId(0),
-            supported: true,
-            lock_reason: None,
+            supported: false,
+            lock_reason: Some(unverified_drs_lock()),
         },
         SettingDescriptor {
             id: "nv.dlss_sr".into(),
@@ -146,8 +152,8 @@ pub fn build_nvidia_3d_descriptors(
             ]),
             value: get("nv.dlss_sr", SettingValue::EnumId(0)),
             default_value: SettingValue::EnumId(0),
-            supported: true,
-            lock_reason: None,
+            supported: false,
+            lock_reason: Some(unverified_drs_lock()),
         },
         SettingDescriptor {
             id: "nv.smooth_motion".into(),
@@ -226,8 +232,8 @@ pub fn build_nvidia_3d_descriptors(
             ]),
             value: get("nv.cuda_fallback", SettingValue::EnumId(0)),
             default_value: SettingValue::EnumId(0),
-            supported: true,
-            lock_reason: None,
+            supported: false,
+            lock_reason: Some(unverified_drs_lock()),
         },
         SettingDescriptor {
             id: "nv.dsr_factors".into(),
@@ -412,7 +418,6 @@ pub fn build_nvidia_3d_descriptors(
                 opt(1, "Off"),
                 opt(2, "On"),
                 opt(3, "Fast"),
-                opt(4, "Adaptive"),
             ]),
             value: get("nv.vsync", SettingValue::EnumId(0)),
             default_value: SettingValue::EnumId(0),

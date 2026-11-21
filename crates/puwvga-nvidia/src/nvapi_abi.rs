@@ -32,25 +32,37 @@ pub const NVAPI_DRS_GET_SETTING: u32 = 0x73BF_8338;
 pub const NVAPI_DRS_SET_SETTING: u32 = 0x577D_D202;
 pub const NVAPI_DRS_RESTORE_ALL_DEFAULTS: u32 = 0x5927_B094;
 
-// Official DRS Setting IDs (from NvApiDriverSettings.h)
-/// `PRERENDERLIMIT_ID`: what NVIDIA Control Panel's "Low Latency Mode" writes (0 = app, 1 = on).
+// DRS setting IDs, each confirmed by NvAPI_DRS_GetSettingNameFromId on a live driver.
+/// "Maximum pre-rendered frames" (PRERENDERLIMIT), what Control Panel's Low Latency Mode writes.
 pub const DRS_PRERENDER_LIMIT: u32 = 0x007B_A09E;
+/// "Frame Rate Limiter"
 pub const DRS_MAX_FRAME_RATE: u32 = 0x1083_5002;
-pub const DRS_BG_MAX_FRAME_RATE: u32 = 0x1083_5004;
+/// "Idle Application Max FPS Limit"
+pub const DRS_IDLE_MAX_FRAME_RATE: u32 = 0x1083_5016;
+/// "Vertical Sync"
 pub const DRS_VSYNC_MODE: u32 = 0x00A8_79CF;
+/// "Power management mode"
 pub const DRS_POWER_MANAGEMENT: u32 = 0x1057_EB71;
-pub const DRS_ANISO_FILTERING: u32 = 0x101E_61A9;
+/// "Anisotropic filtering mode" (0 = application, 1 = user level)
+pub const DRS_ANISO_MODE: u32 = 0x10D2_BB16;
+/// "Anisotropic filtering setting" (1 = off, 2/4/8/16x)
+pub const DRS_ANISO_LEVEL: u32 = 0x101E_61A9;
+/// "Enable FXAA"
 pub const DRS_FXAA_ENABLE: u32 = 0x1074_C972;
+/// "Texture filtering - Quality"
 pub const DRS_TEX_QUALITY: u32 = 0x00CE_2691;
-pub const DRS_TEX_NEG_LOD_BIAS: u32 = 0x19BB_68FF;
-pub const DRS_TEX_ANISO_OPT: u32 = 0x0E73_2111;
-pub const DRS_TEX_TRILINEAR_OPT: u32 = 0x084C_D70B;
+/// "Texture filtering - Negative LOD bias"
+pub const DRS_TEX_NEG_LOD_BIAS: u32 = 0x0019_BB68;
+/// "Texture filtering - Anisotropic sample optimization"
+pub const DRS_TEX_ANISO_OPT: u32 = 0x00E7_3211;
+/// "Texture filtering - Trilinear optimization" (0 = on, 1 = off)
+pub const DRS_TEX_TRILINEAR_OPT: u32 = 0x002E_CAF2;
+/// "Threaded optimization" (0 = auto, 1 = on, 2 = off)
 pub const DRS_THREADED_OPT: u32 = 0x20C1_221E;
-pub const DRS_SHADER_CACHE_SIZE: u32 = 0x198F_FF42;
-pub const DRS_CUDA_SYSMEM_FALLBACK: u32 = 0x1083_5015;
+/// "Shader disk cache maximum size" in MB (0 = disabled, 0xFFFFFFFF = unlimited)
+pub const DRS_SHADER_CACHE_SIZE: u32 = 0x00AC_8497;
+/// "Override DLSS-SR presets" (A = 1 ... K = 11, 0x00FFFFFF = latest)
 pub const DRS_DLSS_SR_PRESET: u32 = 0x10E4_1DF3;
-pub const DRS_DLSS_FG_OVERRIDE: u32 = 0x10E4_1E02;
-pub const DRS_DLSS_SR_OVERRIDE: u32 = 0x10E4_1DF2;
 
 pub type FnQueryInterface = unsafe extern "C" fn(u32) -> *const c_void;
 pub type FnInitialize = unsafe extern "C" fn() -> NvApiStatus;

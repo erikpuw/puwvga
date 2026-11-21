@@ -191,6 +191,13 @@ impl NvidiaBackend {
             .then_some(h_disp)
     }
 
+    fn cache_setting(&self, setting_id: &str, value: &SettingValue) {
+        self.settings_cache
+            .lock()
+            .unwrap()
+            .insert(setting_id.to_string(), value.clone());
+    }
+
     fn sync_cache_from_drs(rt: &NvRuntime, cache: &mut BTreeMap<String, SettingValue>) {
         let (Some(create), Some(destroy), Some(load), Some(base_prof), Some(get_fn)) = (
             rt.fn_drs_create,
@@ -217,8 +224,21 @@ impl NvidiaBackend {
                         {
                             let raw = setting.current_dword();
                             let mapped = match cache.get(&key) {
-                                Some(SettingValue::Bool(_)) => SettingValue::Bool(raw != 0),
+                                Some(SettingValue::Bool(_)) => {
+                                    SettingValue::Bool((raw != 0) != bool_inverted(&key))
+                                }
                                 _ => SettingValue::EnumId(decode_drs_dword(&key, raw)),
+                            };
+                            // AF level only counts when the mode is "user"; mode 0 = application.
+                            let mut mode = Box::new(NvDrsSetting::new_dword(DRS_ANISO_MODE, 0));
+                            let mapped = if key == "nv.af"
+                                && unsafe { get_fn(session, profile, DRS_ANISO_MODE, mode.as_mut()) }
+                                    == NVAPI_OK
+                                && mode.current_dword() == 0
+                            {
+                                SettingValue::EnumId(0)
+                            } else {
+                                mapped
                             };
                             cache.insert(key, mapped);
                         }
@@ -491,18 +511,21 @@ impl GpuBackend for NvidiaBackend {
     ) -> Result<(), BackendError> {
         if let Some(drs_id) = drs_id_for_setting(setting_id) {
             let raw = match value {
-                SettingValue::Bool(b) => u32::from(*b),
+                SettingValue::Bool(b) => u32::from(*b != bool_inverted(setting_id)),
                 SettingValue::EnumId(id) => encode_drs_dword(setting_id, *id),
                 SettingValue::Int(i) => *i as u32,
                 SettingValue::Float(f) => *f as u32,
             };
             let rt = self.runtime.lock().unwrap();
-            Self::write_drs_dword(&rt, drs_id, raw)?;
+            if setting_id == "nv.af" {
+                // Mode 0 hands AF to the application; any level needs mode 1 (user) first.
+                Self::write_drs_dword(&rt, DRS_ANISO_MODE, u32::from(raw != 0))?;
+            }
+            if setting_id != "nv.af" || raw != 0 {
+                Self::write_drs_dword(&rt, drs_id, raw)?;
+            }
         }
-        self.settings_cache
-            .lock()
-            .unwrap()
-            .insert(setting_id.to_string(), value.clone());
+        self.cache_setting(setting_id, value);
         Ok(())
     }
 
@@ -568,34 +591,56 @@ impl GpuBackend for NvidiaBackend {
     }
 }
 
+/// Bool controls whose DRS value means the opposite ("Trilinear optimization": 0 = on).
+fn bool_inverted(setting_id: &str) -> bool {
+    setting_id == "nv.tex_trilinear"
+}
+
+/// UI option id -> DRS DWORD, following the value lists `NvAPI_DRS_EnumAvailableSettingValues`
+/// reports for each setting.
 fn encode_drs_dword(setting_id: &str, ui_id: u32) -> u32 {
-    match setting_id {
+    match (setting_id, ui_id) {
         // Older presets stored 2 = "Ultra"; the driver has no separate Ultra key anymore.
-        "nv.low_latency" => u32::from(ui_id != 0),
-        "nv.vsync" => match ui_id {
-            0 => 0x0841_6747, // VSYNCMODE_PASSIVE (Use 3D app setting)
-            1 => 0x4781_4940, // VSYNCMODE_FORCEOFF
-            2 => 0x4781_4941, // VSYNCMODE_FORCEON
-            3 => 0x1888_8888, // VSYNCMODE_VIRTUAL (Fast)
-            4 => 0x6092_5292, // VSYNCMODE_FLIPINTERVAL2 / Adaptive
-            _ => 0x0841_6747,
-        },
-        _ => ui_id,
+        ("nv.low_latency", v) => u32::from(v != 0),
+        ("nv.dlss_preset", 1) => 0x00FF_FFFF, // Latest
+        ("nv.power_mode", 1) => 1,            // Prefer maximum performance
+        ("nv.power_mode", _) => 5,            // Normal (optimal power)
+        ("nv.vsync", 1) => 0x0841_6747,       // Force off
+        ("nv.vsync", 2) => 0x4781_4940,       // Force on
+        ("nv.vsync", 3) => 0x1888_8888,       // Fast
+        ("nv.vsync", _) => 0x6092_5292,       // Use the 3D application setting
+        ("nv.threaded_opt", 1) => 2,          // Off
+        ("nv.threaded_opt", 2) => 1,          // On
+        ("nv.tex_quality", 0) => 0xFFFF_FFF6, // High quality
+        ("nv.tex_quality", 2) => 0x0A,        // Performance
+        ("nv.tex_quality", 3) => 0x14,        // High performance
+        ("nv.tex_quality", _) => 0,           // Quality
+        ("nv.shader_cache", 0) => 0x4000,     // Driver default reported by the driver
+        ("nv.shader_cache", 1) => 0,          // Disabled
+        (_, v) => v,
     }
 }
 
 fn decode_drs_dword(setting_id: &str, raw: u32) -> u32 {
-    match setting_id {
-        "nv.low_latency" => u32::from(raw != 0),
-        "nv.vsync" => match raw {
-            0x0841_6747 => 0,
-            0x4781_4940 => 1,
-            0x4781_4941 => 2,
-            0x1888_8888 => 3,
-            0x6092_5292 => 4,
-            _ => 0,
-        },
-        _ => raw,
+    match (setting_id, raw) {
+        ("nv.low_latency", v) => u32::from(v != 0),
+        ("nv.dlss_preset", 0x00FF_FFFF) => 1,
+        ("nv.power_mode", 1) => 1,
+        ("nv.power_mode", _) => 0,
+        ("nv.vsync", 0x0841_6747) => 1,
+        ("nv.vsync", 0x4781_4940) => 2,
+        ("nv.vsync", 0x1888_8888) => 3,
+        ("nv.vsync", _) => 0,
+        ("nv.threaded_opt", 2) => 1,
+        ("nv.threaded_opt", 1) => 2,
+        ("nv.threaded_opt", _) => 0,
+        ("nv.tex_quality", 0xFFFF_FFF6) => 0,
+        ("nv.tex_quality", 0x0A) => 2,
+        ("nv.tex_quality", 0x14) => 3,
+        ("nv.tex_quality", _) => 1,
+        ("nv.shader_cache", 0x4000) => 0,
+        ("nv.shader_cache", 0) => 1,
+        (_, v) => v,
     }
 }
 
@@ -609,6 +654,24 @@ mod tests {
         assert_eq!(encode_drs_dword("nv.low_latency", 1), 1);
         assert_eq!(encode_drs_dword("nv.low_latency", 2), 1); // legacy "Ultra" preset
         assert_eq!(decode_drs_dword("nv.low_latency", 3), 1);
+    }
+
+    #[test]
+    fn drs_value_tables_round_trip() {
+        for (key, ui) in [
+            ("nv.vsync", 0..4),
+            ("nv.threaded_opt", 0..3),
+            ("nv.tex_quality", 0..4),
+            ("nv.power_mode", 0..2),
+            ("nv.shader_cache", 0..2),
+        ] {
+            for v in ui {
+                assert_eq!(decode_drs_dword(key, encode_drs_dword(key, v)), v, "{key}={v}");
+            }
+        }
+        assert_eq!(encode_drs_dword("nv.vsync", 0), 0x6092_5292);
+        assert_eq!(encode_drs_dword("nv.dlss_preset", 1), 0x00FF_FFFF);
+        assert!(bool_inverted("nv.tex_trilinear"));
     }
 
     #[test]
