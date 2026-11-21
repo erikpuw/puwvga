@@ -265,9 +265,9 @@ impl eframe::App for InstallerApp {
                                                 self.installed_exe = Some(exe);
                                                 self.status = Status::Done;
                                                 self.message = if self.is_vi {
-                                                    "Đã cài đặt thành công puwvga v1.0.1!".into()
+                                                    format!("Đã cài đặt thành công {APP_NAME} v{APP_VERSION}!")
                                                 } else {
-                                                    "puwvga v1.0.1 installed successfully!".into()
+                                                    format!("{APP_NAME} v{APP_VERSION} installed successfully!")
                                                 };
                                             }
                                             Err(err) => {
