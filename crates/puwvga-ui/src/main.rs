@@ -324,6 +324,14 @@ impl eframe::App for PuwvgaApp {
                 }
             });
     }
+
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        // Flush any pending preset changes, then exit immediately so Windows reclaims
+        // ControlLib.dll (IGCL) and nvapi64.dll handles without stalling the UI thread
+        // during synchronous ctlClose / NvAPI_Unload / FreeLibrary teardown.
+        self.state.auto_save_preset();
+        std::process::exit(0);
+    }
 }
 
 fn nav_button(
