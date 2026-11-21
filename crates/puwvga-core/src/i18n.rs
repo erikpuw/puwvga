@@ -10,7 +10,6 @@ pub enum Language {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TextKey {
     AppSubtitle,
-    DetectedGpus,
     NavDashboard,
     NavColor,
     NavDisplay,
@@ -50,8 +49,6 @@ pub fn tr(lang: Language, key: TextKey) -> &'static str {
     match (lang, key) {
         (Vi, AppSubtitle) => "Điều khiển VGA thuần Rust · Không chạy nền",
         (En, AppSubtitle) => "Pure Rust GPU Control · Zero Background Overhead",
-        (Vi, DetectedGpus) => "VGA phát hiện",
-        (En, DetectedGpus) => "Detected GPUs",
         (Vi, NavDashboard) => "Tổng quan",
         (En, NavDashboard) => "Dashboard",
         (Vi, NavColor) => "Màu & Độ sáng",
@@ -125,7 +122,6 @@ mod tests {
     fn all_keys_non_empty_in_both_languages() {
         let keys = [
             TextKey::AppSubtitle,
-            TextKey::DetectedGpus,
             TextKey::NavDashboard,
             TextKey::NavColor,
             TextKey::NavDisplay,

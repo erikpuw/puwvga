@@ -7,12 +7,12 @@ mod widgets;
 
 use eframe::egui;
 use egui::{CornerRadius, Frame, Margin, RichText, Sense, Stroke, Vec2};
-use puwvga_core::{tr, GpuRole, TextKey};
+use puwvga_core::{tr, TextKey};
 use puwvga_win32::relaunch_as_administrator;
 use state::{AppState, Page};
 use std::time::{Duration, Instant};
-use theme::{apply_fluent_visuals, configure_fonts, vendor_color, Palette};
-use widgets::{draw_icon, vendor_dot, IconKind};
+use theme::{apply_fluent_visuals, configure_fonts, Palette};
+use widgets::{draw_icon, IconKind};
 
 struct PuwvgaApp {
     state: AppState,
@@ -108,99 +108,6 @@ impl eframe::App for PuwvgaApp {
                             );
                         });
                     });
-                    ui.add_space(12.0);
-
-                    // Detected GPUs card (strictly clamped width, truncated labels)
-                    Frame::new()
-                        .fill(p.bg_card)
-                        .stroke(Stroke::new(1.0_f32, p.border_subtle))
-                        .corner_radius(CornerRadius::same(8))
-                        .inner_margin(Margin::same(8))
-                        .show(ui, |ui| {
-                            ui.set_width(198.0);
-                            ui.horizontal(|ui| {
-                                ui.label(
-                                    RichText::new(tr(lang, TextKey::DetectedGpus).to_uppercase())
-                                        .size(10.0)
-                                        .strong()
-                                        .color(p.text_muted),
-                                );
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        ui.label(
-                                            RichText::new(self.state.adapters.len().to_string())
-                                                .size(10.5)
-                                                .color(p.text_muted),
-                                        );
-                                    },
-                                );
-                            });
-                            ui.add_space(5.0);
-                            let adapters = self.state.adapters.clone();
-                            for (idx, g) in adapters.iter().enumerate() {
-                                let active = idx == self.state.selected_gpu_idx;
-                                let attached = self.state.displays_for_gpu(g).len();
-                                let role_str = match g.role {
-                                    GpuRole::Integrated => format!("iGPU · {attached} display"),
-                                    GpuRole::Discrete => format!("dGPU · {attached} display"),
-                                    GpuRole::Primary => format!("Primary · {attached} display"),
-                                };
-                                let resp = Frame::new()
-                                    .fill(if active {
-                                        p.bg_control
-                                    } else {
-                                        egui::Color32::TRANSPARENT
-                                    })
-                                    .stroke(Stroke::new(
-                                        1.0_f32,
-                                        if active {
-                                            p.border_strong
-                                        } else {
-                                            egui::Color32::TRANSPARENT
-                                        },
-                                    ))
-                                    .corner_radius(CornerRadius::same(6))
-                                    .inner_margin(Margin::symmetric(8, 6))
-                                    .show(ui, |ui| {
-                                        ui.set_width(180.0);
-                                        ui.horizontal(|ui| {
-                                            vendor_dot(ui, vendor_color(g.vendor));
-                                            ui.vertical(|ui| {
-                                                ui.set_max_width(156.0);
-                                                ui.add(
-                                                    egui::Label::new(
-                                                        RichText::new(&g.name)
-                                                            .size(12.0)
-                                                            .strong()
-                                                            .color(if active {
-                                                                p.text_primary
-                                                            } else {
-                                                                p.text_secondary
-                                                            }),
-                                                    )
-                                                    .truncate(),
-                                                );
-                                                ui.add(
-                                                    egui::Label::new(
-                                                        RichText::new(role_str)
-                                                            .size(10.5)
-                                                            .color(p.text_muted),
-                                                    )
-                                                    .truncate(),
-                                                );
-                                            });
-                                        });
-                                    })
-                                    .response
-                                    .interact(Sense::click());
-                                if resp.clicked() {
-                                    self.state.select_gpu(idx);
-                                }
-                                ui.add_space(3.0);
-                            }
-                        });
-
                     ui.add_space(12.0);
 
                     nav_button(
