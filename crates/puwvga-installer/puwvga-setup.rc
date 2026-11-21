@@ -1,8 +1,8 @@
 1 ICON "../../assets/puwvga.ico"
 
 1 VERSIONINFO
-FILEVERSION     1,0,3,0
-PRODUCTVERSION  1,0,3,0
+FILEVERSION     1,0,4,0
+PRODUCTVERSION  1,0,4,0
 FILEOS          0x40004
 FILETYPE        0x1
 BEGIN
@@ -12,12 +12,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName",      "erikpuw"
             VALUE "FileDescription",  "puwvga Setup - Unified GPU Control Panel Installer"
-            VALUE "FileVersion",      "1.0.3.0"
+            VALUE "FileVersion",      "1.0.4.0"
             VALUE "InternalName",     "puwvga-setup.exe"
             VALUE "LegalCopyright",   "Copyright (c) 2026 erikpuw (Apache-2.0)"
             VALUE "OriginalFilename", "puwvga-setup.exe"
             VALUE "ProductName",      "puwvga Setup"
-            VALUE "ProductVersion",   "1.0.3"
+            VALUE "ProductVersion",   "1.0.4"
         END
     END
     BLOCK "VarFileInfo"

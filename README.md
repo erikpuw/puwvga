@@ -64,8 +64,8 @@
 
 Bạn có thể tải bản phát hành mới nhất tại mục [Releases](https://github.com/erikpuw/puwvga/releases):
 
-- `puwvga-v1.0.3-portable-x64.exe`: chạy trực tiếp, không cần cài đặt.
-- `puwvga-setup-v1.0.3-x64.exe`: bản cài đặt vào máy, tạo lối tắt Start Menu, Desktop và mục gỡ cài đặt trong Windows Settings (Apps).
+- `puwvga-v1.0.4-portable-x64.exe`: chạy trực tiếp, không cần cài đặt.
+- `puwvga-setup-v1.0.4-x64.exe`: bản cài đặt vào máy, tạo lối tắt Start Menu, Desktop và mục gỡ cài đặt trong Windows Settings (Apps).
 
 Lưu ý: các bản dựng hiện tại chưa có chữ ký số (unsigned). Windows SmartScreen có thể hiển thị cảnh báo "Windows protected your PC" ở lần chạy đầu tiên; chọn **More info** rồi nhấn **Run anyway** nếu bạn tin cậy bản phát hành từ kho mã nguồn này.
 
