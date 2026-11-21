@@ -63,6 +63,16 @@ pub const DRS_THREADED_OPT: u32 = 0x20C1_221E;
 pub const DRS_SHADER_CACHE_SIZE: u32 = 0x00AC_8497;
 /// "Override DLSS-SR presets" (A = 1 ... K = 11, 0x00FFFFFF = latest)
 pub const DRS_DLSS_SR_PRESET: u32 = 0x10E4_1DF3;
+/// "Enable DLSS-SR override": gate for the SR preset and performance mode overrides.
+pub const DRS_DLSS_SR_OVERRIDE: u32 = 0x10E4_1E01;
+/// "Override DLSS-SR performance mode" (0 perf, 1 balanced, 2 quality, 3 app, 4 DLAA, 5 ultra perf)
+pub const DRS_DLSS_SR_MODE: u32 = 0x10AF_B768;
+/// "Enable DLSS-FG override"
+pub const DRS_DLSS_FG_OVERRIDE: u32 = 0x10E4_1E03;
+/// "Override DLSSG mode" (2 = on)
+pub const DRS_DLSSG_MODE: u32 = 0x1030_8298;
+/// "Override DLSSG multi-frame count": generated frames per rendered frame (1 = 2x ... 3 = 4x)
+pub const DRS_DLSSG_MULTI_FRAME_COUNT: u32 = 0x104D_6667;
 
 pub type FnQueryInterface = unsafe extern "C" fn(u32) -> *const c_void;
 pub type FnInitialize = unsafe extern "C" fn() -> NvApiStatus;

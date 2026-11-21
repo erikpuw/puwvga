@@ -55,9 +55,22 @@ pub fn default_nvidia_values(gpu_name: &str) -> BTreeMap<String, SettingValue> {
 }
 
 /// Maps a UI setting ID to its official NVAPI DRS setting ID when directly backed by `nvdrsdb.bin`.
+/// On/off key that must be enabled before the setting's own value takes effect.
+/// When the gate is off (or absent) the UI shows option 0 ("application controlled").
+pub fn drs_gate_for_setting(setting_id: &str) -> Option<u32> {
+    match setting_id {
+        "nv.af" => Some(DRS_ANISO_MODE),
+        "nv.dlss_sr" => Some(DRS_DLSS_SR_OVERRIDE),
+        "nv.dlss_fg" => Some(DRS_DLSS_FG_OVERRIDE),
+        _ => None,
+    }
+}
+
 pub fn drs_id_for_setting(setting_id: &str) -> Option<u32> {
     match setting_id {
         "nv.dlss_preset" => Some(DRS_DLSS_SR_PRESET),
+        "nv.dlss_fg" => Some(DRS_DLSSG_MULTI_FRAME_COUNT),
+        "nv.dlss_sr" => Some(DRS_DLSS_SR_MODE),
         "nv.low_latency" => Some(DRS_PRERENDER_LIMIT),
         "nv.max_fps" => Some(DRS_MAX_FRAME_RATE),
         "nv.power_mode" => Some(DRS_POWER_MANAGEMENT),
@@ -131,8 +144,8 @@ pub fn build_nvidia_3d_descriptors(
             ]),
             value: get("nv.dlss_fg", SettingValue::EnumId(0)),
             default_value: SettingValue::EnumId(0),
-            supported: false,
-            lock_reason: Some(unverified_drs_lock()),
+            supported: true,
+            lock_reason: None,
         },
         SettingDescriptor {
             id: "nv.dlss_sr".into(),
@@ -152,8 +165,8 @@ pub fn build_nvidia_3d_descriptors(
             ]),
             value: get("nv.dlss_sr", SettingValue::EnumId(0)),
             default_value: SettingValue::EnumId(0),
-            supported: false,
-            lock_reason: Some(unverified_drs_lock()),
+            supported: true,
+            lock_reason: None,
         },
         SettingDescriptor {
             id: "nv.smooth_motion".into(),

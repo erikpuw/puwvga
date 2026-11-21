@@ -1,6 +1,6 @@
 use crate::drs::{
     build_nvidia_3d_descriptors, build_nvidia_video_descriptors, default_nvidia_values,
-    drs_id_for_setting,
+    drs_gate_for_setting, drs_id_for_setting,
 };
 use crate::nvapi_abi::*;
 use libloading::Library;
@@ -216,32 +216,29 @@ impl NvidiaBackend {
         if unsafe { load(session) } == NVAPI_OK {
             let mut profile: NvDrsProfileHandle = std::ptr::null_mut();
             if unsafe { base_prof(session, &mut profile) } == NVAPI_OK && !profile.is_null() {
+                let read = |id: u32| {
+                    let mut setting = Box::new(NvDrsSetting::new_dword(id, 0));
+                    (unsafe { get_fn(session, profile, id, setting.as_mut()) } == NVAPI_OK)
+                        .then(|| setting.current_dword())
+                };
                 let keys: Vec<String> = cache.keys().cloned().collect();
                 for key in keys {
-                    if let Some(drs_id) = drs_id_for_setting(&key) {
-                        let mut setting = Box::new(NvDrsSetting::new_dword(drs_id, 0));
-                        if unsafe { get_fn(session, profile, drs_id, setting.as_mut()) } == NVAPI_OK
-                        {
-                            let raw = setting.current_dword();
-                            let mapped = match cache.get(&key) {
-                                Some(SettingValue::Bool(_)) => {
-                                    SettingValue::Bool((raw != 0) != bool_inverted(&key))
-                                }
-                                _ => SettingValue::EnumId(decode_drs_dword(&key, raw)),
-                            };
-                            // AF level only counts when the mode is "user"; mode 0 = application.
-                            let mut mode = Box::new(NvDrsSetting::new_dword(DRS_ANISO_MODE, 0));
-                            let mapped = if key == "nv.af"
-                                && unsafe { get_fn(session, profile, DRS_ANISO_MODE, mode.as_mut()) }
-                                    == NVAPI_OK
-                                && mode.current_dword() == 0
-                            {
-                                SettingValue::EnumId(0)
-                            } else {
-                                mapped
-                            };
-                            cache.insert(key, mapped);
-                        }
+                    let Some(drs_id) = drs_id_for_setting(&key) else {
+                        continue;
+                    };
+                    // A gated setting is "application controlled" until its gate is on.
+                    if drs_gate_for_setting(&key).is_some_and(|g| read(g).unwrap_or(0) == 0) {
+                        cache.insert(key, SettingValue::EnumId(0));
+                        continue;
+                    }
+                    if let Some(raw) = read(drs_id) {
+                        let mapped = match cache.get(&key) {
+                            Some(SettingValue::Bool(_)) => {
+                                SettingValue::Bool((raw != 0) != bool_inverted(&key))
+                            }
+                            _ => SettingValue::EnumId(decode_drs_dword(&key, raw)),
+                        };
+                        cache.insert(key, mapped);
                     }
                 }
             }
@@ -516,12 +513,27 @@ impl GpuBackend for NvidiaBackend {
                 SettingValue::Int(i) => *i as u32,
                 SettingValue::Float(f) => *f as u32,
             };
+            let ui_on = !matches!(value, SettingValue::EnumId(0));
+            let cached_on = |key: &str| {
+                !matches!(
+                    self.settings_cache.lock().unwrap().get(key),
+                    None | Some(SettingValue::EnumId(0))
+                )
+            };
+            // The SR preset and SR mode share one "Enable DLSS-SR override" gate.
+            let gate = match setting_id {
+                "nv.dlss_sr" => Some((DRS_DLSS_SR_OVERRIDE, ui_on || cached_on("nv.dlss_preset"))),
+                "nv.dlss_preset" => Some((DRS_DLSS_SR_OVERRIDE, ui_on || cached_on("nv.dlss_sr"))),
+                id => drs_gate_for_setting(id).map(|g| (g, ui_on)),
+            };
             let rt = self.runtime.lock().unwrap();
-            if setting_id == "nv.af" {
-                // Mode 0 hands AF to the application; any level needs mode 1 (user) first.
-                Self::write_drs_dword(&rt, DRS_ANISO_MODE, u32::from(raw != 0))?;
+            if let Some((gate_id, on)) = gate {
+                Self::write_drs_dword(&rt, gate_id, u32::from(on))?;
             }
-            if setting_id != "nv.af" || raw != 0 {
+            if gate.is_none_or(|(_, on)| on) {
+                if setting_id == "nv.dlss_fg" {
+                    Self::write_drs_dword(&rt, DRS_DLSSG_MODE, 2)?; // NGX_DLSSG_MODE_ON
+                }
                 Self::write_drs_dword(&rt, drs_id, raw)?;
             }
         }
@@ -603,6 +615,12 @@ fn encode_drs_dword(setting_id: &str, ui_id: u32) -> u32 {
         // Older presets stored 2 = "Ultra"; the driver has no separate Ultra key anymore.
         ("nv.low_latency", v) => u32::from(v != 0),
         ("nv.dlss_preset", 1) => 0x00FF_FFFF, // Latest
+        ("nv.dlss_sr", 1) => 4,               // DLAA
+        ("nv.dlss_sr", 2) => 2,               // Quality
+        ("nv.dlss_sr", 3) => 1,               // Balanced
+        ("nv.dlss_sr", 4) => 0,               // Performance
+        ("nv.dlss_sr", 5) => 5,               // Ultra performance
+        ("nv.dlss_sr", _) => 3,               // Application (snippet) controlled
         ("nv.power_mode", 1) => 1,            // Prefer maximum performance
         ("nv.power_mode", _) => 5,            // Normal (optimal power)
         ("nv.vsync", 1) => 0x0841_6747,       // Force off
@@ -625,6 +643,12 @@ fn decode_drs_dword(setting_id: &str, raw: u32) -> u32 {
     match (setting_id, raw) {
         ("nv.low_latency", v) => u32::from(v != 0),
         ("nv.dlss_preset", 0x00FF_FFFF) => 1,
+        ("nv.dlss_sr", 4) => 1,
+        ("nv.dlss_sr", 2) => 2,
+        ("nv.dlss_sr", 1) => 3,
+        ("nv.dlss_sr", 0) => 4,
+        ("nv.dlss_sr", 5) => 5,
+        ("nv.dlss_sr", _) => 0,
         ("nv.power_mode", 1) => 1,
         ("nv.power_mode", _) => 0,
         ("nv.vsync", 0x0841_6747) => 1,
@@ -664,6 +688,7 @@ mod tests {
             ("nv.tex_quality", 0..4),
             ("nv.power_mode", 0..2),
             ("nv.shader_cache", 0..2),
+            ("nv.dlss_sr", 0..6),
         ] {
             for v in ui {
                 assert_eq!(decode_drs_dword(key, encode_drs_dword(key, v)), v, "{key}={v}");
