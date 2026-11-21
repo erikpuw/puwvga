@@ -35,7 +35,7 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
                     let _ = apply_gamma_ramp(&disp.device_name, def.brightness, def.contrast, def.gamma);
                     if let Some(gpu) = state.owner_gpu_for_display(&disp).cloned() {
                         if let Some(b) = state.backends.get(&gpu.vendor).cloned() {
-                            let res = b.set_color(&gpu.id, &disp.id, &def);
+                            let res = b.set_color(&gpu.id, &disp, &def);
                             state.handle_backend_result(res, "Đã khôi phục màu mặc định");
                         }
                     }
@@ -419,7 +419,7 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
         state.auto_save_preset();
         if let Some(gpu) = owner {
             if let Some(b) = state.backends.get(&gpu.vendor).cloned() {
-                let res = b.set_color(&gpu.id, &disp.id, &color);
+                let res = b.set_color(&gpu.id, &disp, &color);
                 state.handle_backend_result(
                     res,
                     if is_vi {

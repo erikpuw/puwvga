@@ -1,7 +1,7 @@
 use crate::igcl_abi::*;
 use libloading::Library;
 use puwvga_core::{
-    BackendError, ColorSettings, DisplayModeSettings, GpuAdapterInfo, GpuBackend, GpuCapabilities,
+    BackendError, ColorSettings, DisplayModeSettings, DisplayOutputInfo, GpuAdapterInfo, GpuBackend, GpuCapabilities,
     GpuId, GpuRole, ScalingMode, SettingControl, SettingDescriptor, SettingOption, SettingScope,
     SettingValue, SpanningConfig, SpanningLayout, Vendor,
 };
@@ -14,6 +14,7 @@ struct IntelRuntime {
     fn_close: FnCtlClose,
     fn_get_device_props: FnCtlGetDeviceProperties,
     fn_enum_displays: FnCtlEnumerateDisplayOutputs,
+    fn_get_display_props: Option<FnCtlGetDisplayProperties>,
     fn_get_lace: Option<FnCtlGetLaceConfig>,
     fn_set_lace: Option<FnCtlSetLaceConfig>,
     fn_pixtx_get: Option<FnCtlPixelTransformationGetConfig>,
@@ -55,6 +56,7 @@ impl IntelBackend {
             fn_enum_devices,
             fn_get_device_props,
             fn_enum_displays,
+            fn_get_display_props,
             fn_get_lace,
             fn_set_lace,
             fn_pixtx_get,
@@ -77,6 +79,10 @@ impl IntelBackend {
                 .map_err(|_| {
                     BackendError::DllNotFound("ControlLib.dll (ctlEnumerateDisplayOutputs)")
                 })?;
+            let display_props = lib
+                .get::<FnCtlGetDisplayProperties>(b"ctlGetDisplayProperties\0")
+                .ok()
+                .map(|s| *s);
             let get_lace = lib
                 .get::<FnCtlGetLaceConfig>(b"ctlGetLACEConfig\0")
                 .ok()
@@ -99,6 +105,7 @@ impl IntelBackend {
                 enum_dev,
                 dev_props,
                 enum_disp,
+                display_props,
                 get_lace,
                 set_lace,
                 pixtx_get,
@@ -131,6 +138,7 @@ impl IntelBackend {
                 fn_close,
                 fn_get_device_props,
                 fn_enum_displays,
+                fn_get_display_props,
                 fn_get_lace,
                 fn_set_lace,
                 fn_pixtx_get,
@@ -148,20 +156,26 @@ impl IntelBackend {
         })
     }
 
-    fn first_display_handle(rt: &IntelRuntime) -> Option<CtlDisplayOutputHandle> {
-        let dev = *rt.device_handles.first()?;
-        let mut count = 0u32;
-        let _ = unsafe { (rt.fn_enum_displays)(dev, &mut count, std::ptr::null_mut()) };
-        if count == 0 {
-            return None;
-        }
-        let mut displays = vec![std::ptr::null_mut(); count as usize];
-        let res = unsafe { (rt.fn_enum_displays)(dev, &mut count, displays.as_mut_ptr()) };
-        if res == CTL_RESULT_SUCCESS {
-            displays.first().copied()
-        } else {
-            None
-        }
+    /// Finds the IGCL output whose Windows encoder id equals the CCD target id of `display`.
+    fn display_handle(rt: &IntelRuntime, target_id: u32) -> Option<CtlDisplayOutputHandle> {
+        let get_props = rt.fn_get_display_props?;
+        rt.device_handles.iter().find_map(|&dev| {
+            let mut count = 0u32;
+            let _ = unsafe { (rt.fn_enum_displays)(dev, &mut count, std::ptr::null_mut()) };
+            let mut displays = vec![std::ptr::null_mut(); count as usize];
+            if count == 0
+                || unsafe { (rt.fn_enum_displays)(dev, &mut count, displays.as_mut_ptr()) }
+                    != CTL_RESULT_SUCCESS
+            {
+                return None;
+            }
+            displays.truncate(count as usize);
+            displays.into_iter().find(|&disp| {
+                let mut props = CtlDisplayProperties::default();
+                (unsafe { get_props(disp, &mut props) }) == CTL_RESULT_SUCCESS
+                    && props.os_display_encoder_id as u32 == target_id
+            })
+        })
     }
 }
 
@@ -224,12 +238,16 @@ impl GpuBackend for IntelBackend {
         Ok(out)
     }
 
-    fn get_color(&self, _adapter: &GpuId, display_id: &str) -> Result<ColorSettings, BackendError> {
+    fn get_color(
+        &self,
+        _adapter: &GpuId,
+        display: &DisplayOutputInfo,
+    ) -> Result<ColorSettings, BackendError> {
         let mut color = self
             .color_cache
             .lock()
             .unwrap()
-            .get(display_id)
+            .get(&display.id)
             .cloned()
             .unwrap_or_else(|| ColorSettings {
                 lace_enabled: Some(true),
@@ -237,7 +255,7 @@ impl GpuBackend for IntelBackend {
             });
 
         let rt = self.runtime.lock().unwrap();
-        if let Some(disp) = Self::first_display_handle(&rt) {
+        if let Some(disp) = Self::display_handle(&rt, display.target_id) {
             if let Some(get_lace) = rt.fn_get_lace {
                 let mut lace = CtlLaceConfig::default();
                 if unsafe { get_lace(disp, &mut lace) } == CTL_RESULT_SUCCESS {
@@ -251,11 +269,11 @@ impl GpuBackend for IntelBackend {
     fn set_color(
         &self,
         _adapter: &GpuId,
-        display_id: &str,
+        display: &DisplayOutputInfo,
         settings: &ColorSettings,
     ) -> Result<(), BackendError> {
         let rt = self.runtime.lock().unwrap();
-        if let Some(disp) = Self::first_display_handle(&rt) {
+        if let Some(disp) = Self::display_handle(&rt, display.target_id) {
             if let (Some(set_lace), Some(enabled)) = (rt.fn_set_lace, settings.lace_enabled) {
                 let mut lace = CtlLaceConfig {
                     enabled,
@@ -305,7 +323,7 @@ impl GpuBackend for IntelBackend {
         self.color_cache
             .lock()
             .unwrap()
-            .insert(display_id.to_string(), settings.clone());
+            .insert(display.id.clone(), settings.clone());
         Ok(())
     }
 

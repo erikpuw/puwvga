@@ -1,5 +1,5 @@
 use crate::model::{
-    ColorSettings, DisplayModeSettings, GpuAdapterInfo, GpuId, MuxMode, SettingDescriptor,
+    ColorSettings, DisplayModeSettings, DisplayOutputInfo, GpuAdapterInfo, GpuId, MuxMode, SettingDescriptor,
     SettingScope, SettingValue, SpanningConfig, Vendor,
 };
 use thiserror::Error;
@@ -24,12 +24,17 @@ pub trait GpuBackend: Send + Sync {
 
     fn enumerate_adapters(&self) -> Result<Vec<GpuAdapterInfo>, BackendError>;
 
-    fn get_color(&self, adapter: &GpuId, display_id: &str) -> Result<ColorSettings, BackendError>;
+    /// `display` carries the GDI name and CCD target id so backends address the exact output.
+    fn get_color(
+        &self,
+        adapter: &GpuId,
+        display: &DisplayOutputInfo,
+    ) -> Result<ColorSettings, BackendError>;
 
     fn set_color(
         &self,
         adapter: &GpuId,
-        display_id: &str,
+        display: &DisplayOutputInfo,
         settings: &ColorSettings,
     ) -> Result<(), BackendError>;
 

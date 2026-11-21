@@ -5,7 +5,7 @@ use crate::drs::{
 use crate::nvapi_abi::*;
 use libloading::Library;
 use puwvga_core::{
-    BackendError, ColorSettings, DisplayModeSettings, GpuAdapterInfo, GpuBackend, GpuCapabilities,
+    BackendError, ColorSettings, DisplayModeSettings, DisplayOutputInfo, GpuAdapterInfo, GpuBackend, GpuCapabilities,
     GpuId, GpuRole, MuxMode, ScalingMode, SettingDescriptor, SettingScope, SettingValue,
     SpanningConfig, SpanningLayout, Vendor,
 };
@@ -19,7 +19,7 @@ struct NvRuntime {
     fn_unload: Option<FnUnload>,
     fn_get_driver_ver: Option<FnGetDriverVersion>,
     fn_gpu_full_name: Option<FnGpuGetFullName>,
-    fn_enum_display: Option<FnEnumDisplayHandle>,
+    fn_assoc_display: Option<FnGetAssociatedDisplayHandle>,
     fn_get_dvc: Option<FnGetDvcInfoEx>,
     fn_set_dvc: Option<FnSetDvcLevelEx>,
     fn_drs_create: Option<FnDrsCreateSession>,
@@ -96,8 +96,8 @@ impl NvidiaBackend {
             unsafe { query_fn(qi, NVAPI_ENUM_PHYSICAL_GPUS) };
         let fn_gpu_full_name: Option<FnGpuGetFullName> =
             unsafe { query_fn(qi, NVAPI_GPU_GET_FULL_NAME) };
-        let fn_enum_display: Option<FnEnumDisplayHandle> =
-            unsafe { query_fn(qi, NVAPI_ENUM_NVIDIA_DISPLAY_HANDLE) };
+        let fn_assoc_display: Option<FnGetAssociatedDisplayHandle> =
+            unsafe { query_fn(qi, NVAPI_GET_ASSOCIATED_NVIDIA_DISPLAY_HANDLE) };
         let fn_get_dvc: Option<FnGetDvcInfoEx> = unsafe { query_fn(qi, NVAPI_GET_DVC_INFO_EX) };
         let fn_set_dvc: Option<FnSetDvcLevelEx> = unsafe { query_fn(qi, NVAPI_SET_DVC_LEVEL_EX) };
 
@@ -145,7 +145,7 @@ impl NvidiaBackend {
             fn_unload,
             fn_get_driver_ver,
             fn_gpu_full_name,
-            fn_enum_display,
+            fn_assoc_display,
             fn_get_dvc,
             fn_set_dvc,
             fn_drs_create,
@@ -179,6 +179,16 @@ impl NvidiaBackend {
 
     pub fn set_hdr_active(&self, active: bool) {
         *self.hdr_active.lock().unwrap() = active;
+    }
+
+    /// Resolves the NVAPI handle for one GDI output (`\\.\DISPLAYn`); `None` when the output
+    /// is not driven by this NVIDIA GPU (e.g. Optimus panel on the iGPU).
+    fn display_handle(rt: &NvRuntime, device_name: &str) -> Option<NvDisplayHandle> {
+        let assoc = rt.fn_assoc_display?;
+        let name = std::ffi::CString::new(device_name).ok()?;
+        let mut h_disp: NvDisplayHandle = std::ptr::null_mut();
+        (unsafe { assoc(name.as_ptr(), &mut h_disp) } == NVAPI_OK && !h_disp.is_null())
+            .then_some(h_disp)
     }
 
     fn sync_cache_from_drs(rt: &NvRuntime, cache: &mut BTreeMap<String, SettingValue>) {
@@ -351,19 +361,22 @@ impl GpuBackend for NvidiaBackend {
         Ok(out)
     }
 
-    fn get_color(&self, _adapter: &GpuId, display_id: &str) -> Result<ColorSettings, BackendError> {
+    fn get_color(
+        &self,
+        _adapter: &GpuId,
+        display: &DisplayOutputInfo,
+    ) -> Result<ColorSettings, BackendError> {
         let mut color = self
             .color_cache
             .lock()
             .unwrap()
-            .get(display_id)
+            .get(&display.id)
             .cloned()
             .unwrap_or_default();
 
         let rt = self.runtime.lock().unwrap();
-        if let (Some(enum_disp), Some(get_dvc)) = (rt.fn_enum_display, rt.fn_get_dvc) {
-            let mut h_disp: NvDisplayHandle = std::ptr::null_mut();
-            if unsafe { enum_disp(0, &mut h_disp) } == NVAPI_OK && !h_disp.is_null() {
+        if let Some(get_dvc) = rt.fn_get_dvc {
+            if let Some(h_disp) = Self::display_handle(&rt, &display.device_name) {
                 let mut dvc = NvDisplayDvcInfoEx::default();
                 if unsafe { get_dvc(h_disp, 0, &mut dvc) } == NVAPI_OK {
                     let span = (dvc.max_level - dvc.min_level).max(1) as f32;
@@ -379,15 +392,12 @@ impl GpuBackend for NvidiaBackend {
     fn set_color(
         &self,
         _adapter: &GpuId,
-        display_id: &str,
+        display: &DisplayOutputInfo,
         settings: &ColorSettings,
     ) -> Result<(), BackendError> {
         let rt = self.runtime.lock().unwrap();
-        if let (Some(enum_disp), Some(get_dvc), Some(set_dvc)) =
-            (rt.fn_enum_display, rt.fn_get_dvc, rt.fn_set_dvc)
-        {
-            let mut h_disp: NvDisplayHandle = std::ptr::null_mut();
-            if unsafe { enum_disp(0, &mut h_disp) } == NVAPI_OK && !h_disp.is_null() {
+        if let (Some(get_dvc), Some(set_dvc)) = (rt.fn_get_dvc, rt.fn_set_dvc) {
+            if let Some(h_disp) = Self::display_handle(&rt, &display.device_name) {
                 let mut dvc = NvDisplayDvcInfoEx::default();
                 if unsafe { get_dvc(h_disp, 0, &mut dvc) } == NVAPI_OK {
                     let span = (dvc.max_level - dvc.min_level).max(1) as f32;
@@ -401,7 +411,7 @@ impl GpuBackend for NvidiaBackend {
         self.color_cache
             .lock()
             .unwrap()
-            .insert(display_id.to_string(), settings.clone());
+            .insert(display.id.clone(), settings.clone());
         Ok(())
     }
 

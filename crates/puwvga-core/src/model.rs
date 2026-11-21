@@ -71,6 +71,9 @@ pub struct GpuAdapterInfo {
 pub struct DisplayOutputInfo {
     pub id: String,
     pub device_name: String,
+    /// `DISPLAYCONFIG_PATH_TARGET_INFO.id`, matches Intel IGCL's Windows display encoder id.
+    #[serde(default)]
+    pub target_id: u32,
     pub friendly_name: String,
     pub adapter_luid_low: u32,
     pub adapter_luid_high: i32,

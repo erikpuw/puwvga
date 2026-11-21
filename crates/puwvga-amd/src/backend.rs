@@ -1,7 +1,7 @@
 use crate::adl_abi::*;
 use libloading::Library;
 use puwvga_core::{
-    BackendError, ColorSettings, DisplayModeSettings, GpuAdapterInfo, GpuBackend, GpuCapabilities,
+    BackendError, ColorSettings, DisplayModeSettings, DisplayOutputInfo, GpuAdapterInfo, GpuBackend, GpuCapabilities,
     GpuId, GpuRole, ScalingMode, SettingControl, SettingDescriptor, SettingOption, SettingScope,
     SettingValue, SpanningConfig, SpanningLayout, Vendor,
 };
@@ -126,12 +126,16 @@ impl GpuBackend for AmdBackend {
         }])
     }
 
-    fn get_color(&self, _adapter: &GpuId, display_id: &str) -> Result<ColorSettings, BackendError> {
+    fn get_color(
+        &self,
+        _adapter: &GpuId,
+        display: &DisplayOutputInfo,
+    ) -> Result<ColorSettings, BackendError> {
         Ok(self
             .color_cache
             .lock()
             .unwrap()
-            .get(display_id)
+            .get(&display.id)
             .cloned()
             .unwrap_or_else(|| ColorSettings {
                 color_temp_kelvin: Some(6500),
@@ -142,13 +146,13 @@ impl GpuBackend for AmdBackend {
     fn set_color(
         &self,
         _adapter: &GpuId,
-        display_id: &str,
+        display: &DisplayOutputInfo,
         settings: &ColorSettings,
     ) -> Result<(), BackendError> {
         self.color_cache
             .lock()
             .unwrap()
-            .insert(display_id.to_string(), settings.clone());
+            .insert(display.id.clone(), settings.clone());
         Ok(())
     }
 

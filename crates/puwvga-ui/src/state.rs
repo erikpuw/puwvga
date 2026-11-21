@@ -274,14 +274,14 @@ impl AppState {
                 );
                 if let Some(gpu) = self.owner_gpu_for_display(disp).cloned() {
                     if let Some(backend) = self.backends.get(&gpu.vendor) {
-                        let _ = backend.set_color(&gpu.id, &disp.id, &color);
+                        let _ = backend.set_color(&gpu.id, disp, &color);
                     }
                 }
             } else {
                 let mut initial = if let Some(gpu) = self.owner_gpu_for_display(disp) {
                     self.backends
                         .get(&gpu.vendor)
-                        .and_then(|b| b.get_color(&gpu.id, &disp.id).ok())
+                        .and_then(|b| b.get_color(&gpu.id, disp).ok())
                         .unwrap_or_default()
                 } else {
                     ColorSettings::default()
@@ -540,7 +540,7 @@ impl AppState {
                         );
                         if let Some(gpu) = self.owner_gpu_for_display(&disp).cloned() {
                             if let Some(backend) = self.backends.get(&gpu.vendor) {
-                                let _ = backend.set_color(&gpu.id, &disp.id, &color);
+                                let _ = backend.set_color(&gpu.id, &disp, &color);
                             }
                         }
                     }

@@ -329,6 +329,29 @@ pub type FnCtlEnumerateDisplayOutputs = unsafe extern "C" fn(
     *mut u32,
     *mut CtlDisplayOutputHandle,
 ) -> CtlResult;
+/// `ctl_display_properties_t` (192 bytes). Only the header and the OS encoder id union are read;
+/// on Windows the union's low 32 bits are the CCD `DISPLAYCONFIG_PATH_TARGET_INFO.id`.
+#[repr(C)]
+pub struct CtlDisplayProperties {
+    pub size: u32,
+    pub version: u8,
+    pub os_display_encoder_id: u64,
+    _rest: [u8; 176],
+}
+
+impl Default for CtlDisplayProperties {
+    fn default() -> Self {
+        Self {
+            size: std::mem::size_of::<Self>() as u32,
+            version: 0,
+            os_display_encoder_id: 0,
+            _rest: [0u8; 176],
+        }
+    }
+}
+
+pub type FnCtlGetDisplayProperties =
+    unsafe extern "C" fn(CtlDisplayOutputHandle, *mut CtlDisplayProperties) -> CtlResult;
 pub type FnCtlGetBrightnessSetting =
     unsafe extern "C" fn(CtlDisplayOutputHandle, *mut CtlGetBrightness) -> CtlResult;
 pub type FnCtlSetBrightnessSetting =

@@ -165,6 +165,7 @@ pub fn enumerate_active_displays() -> Result<Vec<DisplayOutputInfo>, BackendErro
                 adapter_luid.HighPart, adapter_luid.LowPart, path.targetInfo.id
             ),
             device_name,
+            target_id: path.targetInfo.id,
             friendly_name,
             adapter_luid_low: adapter_luid.LowPart,
             adapter_luid_high: adapter_luid.HighPart,

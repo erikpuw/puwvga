@@ -1,4 +1,4 @@
-use std::ffi::c_void;
+use std::ffi::{c_char, c_void};
 
 pub type NvApiStatus = i32;
 pub const NVAPI_OK: NvApiStatus = 0;
@@ -14,7 +14,7 @@ pub const NVAPI_UNLOAD: u32 = 0xD22B_DD7E;
 pub const NVAPI_SYS_GET_DRIVER_AND_BRANCH_VERSION: u32 = 0x2926_AAAD;
 pub const NVAPI_ENUM_PHYSICAL_GPUS: u32 = 0xE5AC_921F;
 pub const NVAPI_GPU_GET_FULL_NAME: u32 = 0xCEEE_8E9F;
-pub const NVAPI_ENUM_NVIDIA_DISPLAY_HANDLE: u32 = 0x9ABD_D40D;
+pub const NVAPI_GET_ASSOCIATED_NVIDIA_DISPLAY_HANDLE: u32 = 0x35C2_9134;
 pub const NVAPI_GET_DVC_INFO_EX: u32 = 0x0E45_002D;
 pub const NVAPI_SET_DVC_LEVEL_EX: u32 = 0x4A82_C2B1;
 pub const NVAPI_GET_HUE_INFO: u32 = 0x95B6_4341;
@@ -56,7 +56,9 @@ pub type FnGetDriverVersion = unsafe extern "C" fn(*mut u32, *mut u8) -> NvApiSt
 pub type FnEnumPhysicalGpus =
     unsafe extern "C" fn(*mut NvPhysicalGpuHandle, *mut u32) -> NvApiStatus;
 pub type FnGpuGetFullName = unsafe extern "C" fn(NvPhysicalGpuHandle, *mut u8) -> NvApiStatus;
-pub type FnEnumDisplayHandle = unsafe extern "C" fn(u32, *mut NvDisplayHandle) -> NvApiStatus;
+/// `NvAPI_GetAssociatedNvidiaDisplayHandle("\\.\DISPLAYn", &handle)`
+pub type FnGetAssociatedDisplayHandle =
+    unsafe extern "C" fn(*const c_char, *mut NvDisplayHandle) -> NvApiStatus;
 
 pub type FnDrsCreateSession = unsafe extern "C" fn(*mut NvDrsSessionHandle) -> NvApiStatus;
 pub type FnDrsDestroySession = unsafe extern "C" fn(NvDrsSessionHandle) -> NvApiStatus;
@@ -80,6 +82,7 @@ pub type FnDrsRestoreAllDefaults = unsafe extern "C" fn(NvDrsSessionHandle) -> N
 pub const NVAPI_MAX_PHYSICAL_GPUS: usize = 64;
 pub const NVAPI_SHORT_STRING_MAX: usize = 64;
 pub const NVAPI_UNICODE_STRING_MAX: usize = 2048;
+pub const NVDRS_VALUE_UNION_SIZE: usize = 4 + 4096;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -108,7 +111,9 @@ pub type FnGetDvcInfoEx =
 pub type FnSetDvcLevelEx =
     unsafe extern "C" fn(NvDisplayHandle, u32, *mut NvDisplayDvcInfoEx) -> NvApiStatus;
 
-/// Compact representation of `NVDRS_SETTING_V1` (4148 bytes in NVAPI SDK) for DWORD DRS settings.
+/// `NVDRS_SETTING_V1` (12320 bytes). Each value union is sized by its largest member,
+/// `NVDRS_BINARY_SETTING { u32 valueLength; u8 valueData[4096]; }` = 4100 bytes.
+/// DWORD values live in the first 4 bytes of the union.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct NvDrsSetting {
@@ -119,8 +124,8 @@ pub struct NvDrsSetting {
     pub setting_location: u32,
     pub is_current_predefined: u32,
     pub is_predefined_valid: u32,
-    pub predefined_value: [u8; 4096],
-    pub current_value: [u8; 4096],
+    pub predefined_value: [u8; NVDRS_VALUE_UNION_SIZE],
+    pub current_value: [u8; NVDRS_VALUE_UNION_SIZE],
 }
 
 impl NvDrsSetting {
@@ -133,8 +138,8 @@ impl NvDrsSetting {
             setting_location: 0,
             is_current_predefined: 0,
             is_predefined_valid: 0,
-            predefined_value: [0u8; 4096],
-            current_value: [0u8; 4096],
+            predefined_value: [0u8; NVDRS_VALUE_UNION_SIZE],
+            current_value: [0u8; NVDRS_VALUE_UNION_SIZE],
         };
         s.current_value[..4].copy_from_slice(&value.to_le_bytes());
         s
@@ -162,6 +167,13 @@ mod tests {
     fn formats_nvapi_driver_version() {
         assert_eq!(format_nv_driver_version(57260), "572.60");
         assert_eq!(format_nv_driver_version(61692), "616.92");
+    }
+
+    #[test]
+    fn drs_setting_matches_sdk_size() {
+        // NVDRS_SETTING_VER1 = MAKE_NVAPI_VERSION(NVDRS_SETTING_V1, 1) = 0x0001_3020
+        assert_eq!(std::mem::size_of::<NvDrsSetting>(), 0x3020);
+        assert_eq!(NvDrsSetting::new_dword(0, 0).version, 0x0001_3020);
     }
 
     #[test]
