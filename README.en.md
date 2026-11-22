@@ -11,7 +11,7 @@
   Written in Rust, ~2.3 MB installer, no WebView, nothing left running in the background, no Visual C++ Redistributable needed.
 </p>
 
-<p align="center"><a href="README.md">Tiếng Việt</a> · <b>English</b> · <a href="https://github.com/erikpuw/puwvga/releases">Latest release: v1.0.4</a></p>
+<p align="center"><a href="README.md">Tiếng Việt</a> · <b>English</b> · <a href="https://github.com/erikpuw/puwvga/releases/latest"><img src="https://img.shields.io/github/v/release/erikpuw/puwvga?label=Latest" alt="Latest release" valign="middle"></a></p>
 
 > I got tired of every GPU vendor having its own control panel, so the idea was to bring all the settings into one place.
 >
@@ -56,7 +56,7 @@ These show up in the UI but are not written to the driver yet, or have not been 
 ## Install and use
 
 1. If puwvga is already running, close it first so the installer can replace the exe.
-2. Download `puwvga-setup-v1.0.4-x64.exe` (~2.3 MB) from [Releases](https://github.com/erikpuw/puwvga/releases) and run it to install (creates Start Menu and Desktop shortcuts and an entry under Windows Settings > Apps for uninstalling).
+2. Download `puwvga-setup-v*-x64.exe` (~2.3 MB) from [Releases](https://github.com/erikpuw/puwvga/releases/latest) and run it to install (creates Start Menu and Desktop shortcuts and an entry under Windows Settings > Apps for uninstalling).
 3. Open the app, pick a display on the Color or Display page and adjust. Changes are saved immediately.
 4. To have color re-applied after logon or unlock, turn on **Auto-apply color on logon and unlock** in Settings.
 

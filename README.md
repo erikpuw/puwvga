@@ -11,7 +11,7 @@
   Viết bằng Rust, bộ cài ~2,3 MB, không WebView, không chạy nền, không cần cài Visual C++ Redistributable.
 </p>
 
-<p align="center"><b>Tiếng Việt</b> · <a href="README.en.md">English</a> · <a href="https://github.com/erikpuw/puwvga/releases">Bản mới nhất: v1.0.4</a></p>
+<p align="center"><b>Tiếng Việt</b> · <a href="README.en.md">English</a> · <a href="https://github.com/erikpuw/puwvga/releases/latest"><img src="https://img.shields.io/github/v/release/erikpuw/puwvga?label=B%E1%BA%A3n%20m%E1%BB%9Bi%20nh%E1%BA%A5t" alt="Bản mới nhất" valign="middle"></a></p>
 
 > Tôi mệt mỏi với các điều khiển VGA của từng hãng, nên ý tưởng xuất phát các điều chỉnh về một nơi.
 >
@@ -56,7 +56,7 @@ Những mục dưới đây hiện trong giao diện nhưng chưa ghi xuống dr
 ## Cài đặt và dùng
 
 1. Nếu puwvga đang mở, đóng app trước khi chạy bộ cài để ghi đè file.
-2. Tải `puwvga-setup-v1.0.4-x64.exe` (~2,3 MB) từ mục [Releases](https://github.com/erikpuw/puwvga/releases) rồi chạy để cài đặt (có lối tắt Start Menu, Desktop và mục gỡ cài trong Windows Settings).
+2. Tải `puwvga-setup-v*-x64.exe` (~2,3 MB) từ mục [Releases](https://github.com/erikpuw/puwvga/releases/latest) rồi chạy để cài đặt (có lối tắt Start Menu, Desktop và mục gỡ cài trong Windows Settings).
 3. Mở app, chọn màn hình ở trang Màu sắc hoặc Màn hình rồi chỉnh. Thay đổi được lưu ngay.
 4. Muốn màu tự áp lại sau khi đăng nhập hoặc mở khóa máy, bật **Tự áp màu khi đăng nhập và mở khóa máy** trong Cài đặt.
 
