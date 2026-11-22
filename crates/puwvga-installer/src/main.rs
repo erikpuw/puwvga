@@ -211,9 +211,9 @@ impl eframe::App for InstallerApp {
 
                 ui.label(
                     RichText::new(if self.is_vi {
-                        "Giấy phép: Apache License 2.0 · Bản cài đặt nội bộ chưa có chữ ký số (Unsigned)"
+                        "Bản cài đặt chưa có chữ ký số (Unsigned) · Chỉ tải từ github.com/erikpuw/puwvga"
                     } else {
-                        "License: Apache License 2.0 · Unsigned installer build"
+                        "Unsigned installer build · Download only from github.com/erikpuw/puwvga"
                     })
                     .size(11.0)
                     .color(text_sec),
@@ -377,9 +377,10 @@ fn main() -> eframe::Result<()> {
         viewport: egui::ViewportBuilder::default()
             .with_title(format!("{APP_NAME} v{APP_VERSION} Setup"))
             .with_icon(Arc::new(load_window_icon()))
-            .with_inner_size(Vec2::new(520.0, 365.0))
+            .with_inner_size(Vec2::new(540.0, 365.0))
             .with_resizable(false),
         centered: true,
+        persist_window: false,
         ..Default::default()
     };
 
