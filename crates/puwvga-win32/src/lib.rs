@@ -11,4 +11,7 @@ pub use display_ccd::{
 pub use dxgi::{enumerate_dxgi_adapters, DxgiAdapter};
 pub use gamma_ramp::{apply_gamma_ramp, build_gamma_ramp, read_gamma_ramp_estimate};
 pub use task_scheduler::{is_apply_on_startup_enabled, set_apply_on_startup, STARTUP_TASK_NAME};
-pub use theme::{hide_process_windows, is_windows_dark_mode, relaunch_as_administrator};
+pub use theme::{
+    hide_process_windows, is_windows_dark_mode, open_nvidia_control_panel, read_nvidia_mux_state,
+    relaunch_as_administrator,
+};

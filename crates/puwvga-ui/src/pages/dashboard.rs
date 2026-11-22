@@ -81,38 +81,49 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
     );
 
     if adapters.len() > 1 {
-        // No public NVIDIA API switches the MUX, so this only reports the current routing:
-        // displays driven by the dGPU and none by the iGPU means dGPU-only.
+        // The driver persists the Control Panel choice; without that key (no NVIDIA hybrid
+        // registry), fall back to which GPU drives the displays.
         let routed_to = |role: GpuRole| {
             state
                 .displays
                 .iter()
                 .any(|d| state.owner_gpu_for_display(d).is_some_and(|g| g.role == role))
         };
-        let mode = if routed_to(GpuRole::Discrete) && !routed_to(GpuRole::Integrated) {
-            MuxMode::DiscreteGpuOnly
-        } else {
-            MuxMode::HybridOptimus
-        };
+        let mode = state.mux_mode.unwrap_or(
+            if routed_to(GpuRole::Discrete) && !routed_to(GpuRole::Integrated) {
+                MuxMode::DiscreteGpuOnly
+            } else {
+                MuxMode::HybridOptimus
+            },
+        );
+        let mut open_nvcp = false;
         setting_card_with_icon(
             ui,
             p,
             IconKind::List,
-            "Display Mode (MUX / Optimus)",
+            &format!("Display Mode (MUX / Optimus): {}", mux_label(mode)),
             if is_vi {
-                "Chế độ xuất hình hiện tại, suy ra từ màn hình đang nối vào iGPU hay dGPU"
+                "Đọc từ driver NVIDIA. NVIDIA không có API công khai để đổi, hãy đổi trong NVIDIA Control Panel."
             } else {
-                "Current display routing, derived from which GPU drives the displays"
+                "Read from the NVIDIA driver. NVIDIA has no public API to switch it; change it in NVIDIA Control Panel."
             },
-            Some(if is_vi {
-                "Chỉ hiển thị: NVIDIA không có API công khai để đổi MUX. Đổi trong NVIDIA App hoặc BIOS."
-            } else {
-                "Read-only: NVIDIA has no public API to switch the MUX. Change it in NVIDIA App or BIOS."
-            }),
+            None,
             |ui| {
-                ui.label(mux_label(mode));
+                if ui
+                    .button(if is_vi { "Mở NVIDIA Control Panel" } else { "Open NVIDIA Control Panel" })
+                    .clicked()
+                {
+                    open_nvcp = true;
+                }
             },
         );
+        if open_nvcp && !puwvga_win32::open_nvidia_control_panel() {
+            state.set_toast(if is_vi {
+                "Không mở được NVIDIA Control Panel"
+            } else {
+                "Could not open NVIDIA Control Panel"
+            });
+        }
     } else if let Some(gpu) = adapters.first() {
         let disp_desc = state
             .displays
@@ -220,6 +231,7 @@ fn render_gpu_panel(
 
 fn mux_label(mode: MuxMode) -> &'static str {
     match mode {
+        MuxMode::Automatic => "Automatic Select",
         MuxMode::HybridOptimus => "Optimus (iGPU + dGPU)",
         MuxMode::DiscreteGpuOnly => "Discrete GPU Only",
     }

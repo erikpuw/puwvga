@@ -39,8 +39,7 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
                             state.handle_backend_result(res, "Đã khôi phục màu mặc định");
                         }
                     }
-                    state.color_by_display.insert(disp.id, def.clone());
-                    state.color_by_display.insert(disp.device_name, def);
+                    state.color_by_display.insert(disp.panel_key, def);
                     state.auto_save_preset();
                 }
             }
@@ -108,7 +107,7 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
     let vendor = owner.as_ref().map(|g| g.vendor).unwrap_or(Vendor::Intel);
     let mut color = state
         .color_by_display
-        .get(&disp.id)
+        .get(&disp.panel_key)
         .cloned()
         .unwrap_or_default();
     let mut changed = false;
@@ -411,10 +410,9 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
         changed = true;
     }
 
-    state.color_by_display.insert(disp.id.clone(), color.clone());
     state
         .color_by_display
-        .insert(disp.device_name.clone(), color.clone());
+        .insert(disp.panel_key.clone(), color.clone());
     if changed {
         state.auto_save_preset();
         if let Some(gpu) = owner {

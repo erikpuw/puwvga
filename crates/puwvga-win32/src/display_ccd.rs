@@ -51,8 +51,17 @@ pub fn enumerate_active_displays() -> Result<Vec<DisplayOutputInfo>, BackendErro
             },
             ..Default::default()
         };
+        let target_ok =
+            unsafe { DisplayConfigGetDeviceInfo(&mut tgt_name.header) } == ERROR_SUCCESS.0 as i32;
+        // flags bit 2 = edidIdsValid
+        let panel_key = if target_ok && unsafe { tgt_name.flags.Anonymous.value } & 0x4 != 0 {
+            // ponytail: two identical monitors share one key (and one color profile).
+            format!("EDID:{:04X}:{:04X}", tgt_name.edidManufactureId, tgt_name.edidProductCodeId)
+        } else {
+            device_name.clone()
+        };
         let friendly_name =
-            if unsafe { DisplayConfigGetDeviceInfo(&mut tgt_name.header) } == ERROR_SUCCESS.0 as i32
+            if target_ok
             {
                 let s = wide_to_string(&tgt_name.monitorFriendlyDeviceName);
                 if s.is_empty() {
@@ -121,6 +130,7 @@ pub fn enumerate_active_displays() -> Result<Vec<DisplayOutputInfo>, BackendErro
             ),
             device_name,
             target_id: path.targetInfo.id,
+            panel_key,
             friendly_name,
             adapter_luid_low: adapter_luid.LowPart,
             adapter_luid_high: adapter_luid.HighPart,

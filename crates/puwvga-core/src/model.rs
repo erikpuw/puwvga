@@ -74,6 +74,10 @@ pub struct DisplayOutputInfo {
     /// `DISPLAYCONFIG_PATH_TARGET_INFO.id`, matches Intel IGCL's Windows display encoder id.
     #[serde(default)]
     pub target_id: u32,
+    /// Stable identity of the physical panel (`EDID:<mfg>:<product>`), unchanged when a MUX
+    /// switch moves the panel to another GPU (which changes `id`). Falls back to `device_name`.
+    #[serde(default)]
+    pub panel_key: String,
     pub friendly_name: String,
     pub adapter_luid_low: u32,
     pub adapter_luid_high: i32,
@@ -179,6 +183,7 @@ pub struct DisplayModeSettings {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MuxMode {
+    Automatic,
     HybridOptimus,
     DiscreteGpuOnly,
 }

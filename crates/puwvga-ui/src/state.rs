@@ -1,7 +1,7 @@
 use puwvga_amd::AmdBackend;
 use puwvga_core::{
     BackendError, ColorSettings, DisplayModeSettings, DisplayOutputInfo, GpuAdapterInfo,
-    GpuBackend, GpuCapabilities, GpuId, GpuRole, Language, PresetBundle, PresetStore,
+    GpuBackend, GpuCapabilities, GpuId, GpuRole, Language, MuxMode, PresetBundle, PresetStore,
     ScalingMode, SettingDescriptor, SettingScope, SettingValue, SpanningConfig, SpanningLayout,
     ThemePreference, Vendor,
 };
@@ -10,7 +10,7 @@ use puwvga_nvidia::NvidiaBackend;
 use puwvga_win32::{
     apply_display_mode, apply_gamma_ramp, enumerate_active_displays, enumerate_dxgi_adapters,
     get_display_scaling, is_apply_on_startup_enabled, is_windows_dark_mode, list_supported_modes,
-    read_gamma_ramp_estimate, set_apply_on_startup, set_display_scaling,
+    read_gamma_ramp_estimate, read_nvidia_mux_state, set_apply_on_startup, set_display_scaling,
 };
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -81,6 +81,16 @@ pub struct AppState {
     pub toast: Option<(String, Instant)>,
     pub needs_admin_banner: bool,
     pub startup_task_enabled: bool,
+    /// NVIDIA "Manage Display mode" as persisted by the driver; `None` without NVIDIA hybrid graphics.
+    pub mux_mode: Option<MuxMode>,
+}
+
+fn read_mux_mode() -> Option<MuxMode> {
+    read_nvidia_mux_state().map(|(state, automatic)| match (automatic, state) {
+        (true, _) => MuxMode::Automatic,
+        (false, 2) => MuxMode::DiscreteGpuOnly,
+        _ => MuxMode::HybridOptimus,
+    })
 }
 
 impl AppState {
@@ -126,6 +136,7 @@ impl AppState {
             toast: None,
             needs_admin_banner: false,
             startup_task_enabled: is_apply_on_startup_enabled(),
+            mux_mode: None,
         };
 
         state.init_backends();
@@ -172,9 +183,20 @@ impl AppState {
         }
     }
 
+    /// Re-reads hardware when the display topology changed while the app was in the background
+    /// (e.g. a MUX switch moved the panel to the other GPU), which also re-applies saved colors.
+    pub fn refresh_if_topology_changed(&mut self) {
+        let ids = |v: &[DisplayOutputInfo]| v.iter().map(|d| d.id.clone()).collect::<Vec<_>>();
+        let live = enumerate_active_displays().unwrap_or_default();
+        if ids(&live) != ids(&self.displays) || read_mux_mode() != self.mux_mode {
+            self.refresh_hardware();
+        }
+    }
+
     /// Reads static GPU & display topology once on startup or explicit refresh (zero background polling).
     pub fn refresh_hardware(&mut self) {
         self.system_dark = is_windows_dark_mode();
+        self.mux_mode = read_mux_mode();
         self.displays = enumerate_active_displays().unwrap_or_default();
 
         let dxgi_list = enumerate_dxgi_adapters().unwrap_or_default();
@@ -245,17 +267,17 @@ impl AppState {
             let ds = self.read_display_settings(disp);
             self.display_settings_by_id.insert(disp.id.clone(), ds);
 
-            // Check if we already have saved color settings (by disp.id or by stable device_name fallback)
-            let saved_color = self
-                .color_by_display
-                .get(&disp.id)
-                .cloned()
-                .or_else(|| self.color_by_display.get(&disp.device_name).cloned());
+            // Colors follow the physical panel. Presets written before panel keys existed used the
+            // GPU-specific id or the GDI name; migrate them once and drop the stale keys.
+            let saved_color = [&disp.panel_key, &disp.id, &disp.device_name]
+                .into_iter()
+                .find_map(|k| self.color_by_display.get(k).cloned());
+            self.color_by_display.remove(&disp.id);
+            self.color_by_display.remove(&disp.device_name);
 
             if let Some(color) = saved_color {
-                self.color_by_display.insert(disp.id.clone(), color.clone());
                 self.color_by_display
-                    .insert(disp.device_name.clone(), color.clone());
+                    .insert(disp.panel_key.clone(), color.clone());
                 let _ = apply_gamma_ramp(
                     &disp.device_name,
                     color.brightness,
@@ -281,10 +303,7 @@ impl AppState {
                     initial.contrast = c;
                     initial.gamma = g;
                 }
-                self.color_by_display
-                    .insert(disp.id.clone(), initial.clone());
-                self.color_by_display
-                    .insert(disp.device_name.clone(), initial);
+                self.color_by_display.insert(disp.panel_key.clone(), initial);
             }
         }
 
@@ -569,7 +588,7 @@ impl AppState {
                     if let Some(disp) = self
                         .displays
                         .iter()
-                        .find(|d| d.id == disp_id || d.device_name == disp_id)
+                        .find(|d| d.panel_key == disp_id || d.id == disp_id || d.device_name == disp_id)
                         .cloned()
                     {
                         let _ = apply_gamma_ramp(

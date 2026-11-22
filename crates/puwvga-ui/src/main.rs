@@ -17,6 +17,7 @@ use widgets::{draw_icon, IconKind};
 struct PuwvgaApp {
     state: AppState,
     last_dark: Option<bool>,
+    focused: bool,
 }
 
 impl PuwvgaApp {
@@ -28,6 +29,7 @@ impl PuwvgaApp {
         Self {
             state,
             last_dark: Some(dark),
+            focused: true,
         }
     }
 }
@@ -38,6 +40,14 @@ impl eframe::App for PuwvgaApp {
         if ctx.input(|i| i.viewport().close_requested()) {
             eframe::App::on_exit(self, None);
         }
+
+        // A MUX switch in NVIDIA Control Panel moves the panel to the other GPU and drops its
+        // color state; coming back to the app re-reads the topology and re-applies saved colors.
+        let focused = ctx.input(|i| i.viewport().focused.unwrap_or(true));
+        if focused && !self.focused {
+            self.state.refresh_if_topology_changed();
+        }
+        self.focused = focused;
 
         let dark = self.state.is_dark();
         let p = Palette::for_mode(dark);
