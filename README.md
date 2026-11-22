@@ -41,7 +41,7 @@
 
 - Đổi độ phân giải và tần số quét (Windows CCD, tự hoàn tác sau 15 giây nếu chưa xác nhận).
 - Scaling: Intel đi qua IGCL (gồm Retro/Integer Scaling), NVIDIA và AMD đi qua Windows CCD. Sharpness cho Intel qua IGCL. G-SYNC cho NVIDIA qua DRS (`VRR_MODE`). VRR trên Intel và FreeSync trên AMD chưa có API để bật tắt nên đang khóa.
-- Hiển thị chế độ Display mode (MUX) hiện tại trên laptop 2 GPU (Automatic Select, Optimus hoặc NVIDIA GPU only), đọc từ trạng thái mà driver NVIDIA lưu. NVIDIA không có API công khai để đổi MUX, nên app có nút mở thẳng NVIDIA Control Panel.
+- Hiển thị chế độ Display mode (MUX) hiện tại trên laptop 2 GPU (Automatic Select, Optimus hoặc NVIDIA GPU only), đọc từ trạng thái mà driver NVIDIA lưu. Danh sách 3 mục hiện đúng chế độ đang chạy. NVIDIA không có API công khai để đổi MUX, nên khi chọn mục khác app mở NVIDIA Control Panel để chuyển.
 - Cấu hình màu đi theo màn hình vật lý (định danh EDID), không theo GPU. Sau khi đổi MUX, quay lại app thì màu đã lưu được áp lại lên GPU mới.
 - Ghép nhiều màn hình (NVIDIA Mosaic, Intel Combined Display, AMD Eyefinity) mới có phần xem trước bố cục. Lệnh ghép qua driver chưa được kiểm chứng trên máy nhiều màn hình nên đang khóa.
 

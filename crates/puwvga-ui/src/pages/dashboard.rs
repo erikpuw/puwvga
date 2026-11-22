@@ -96,32 +96,37 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
                 MuxMode::HybridOptimus
             },
         );
-        let mut open_nvcp = false;
+        let mut selected = mode;
         setting_card_with_icon(
             ui,
             p,
             IconKind::List,
-            &format!("Display Mode (MUX / Optimus): {}", mux_label(mode)),
+            "Display Mode (MUX / Optimus)",
             if is_vi {
-                "Đọc từ driver NVIDIA. NVIDIA không có API công khai để đổi, hãy đổi trong NVIDIA Control Panel."
+                "Chế độ hiện tại đọc từ driver NVIDIA. Chọn chế độ khác sẽ mở NVIDIA Control Panel để chuyển."
             } else {
-                "Read from the NVIDIA driver. NVIDIA has no public API to switch it; change it in NVIDIA Control Panel."
+                "Current mode is read from the NVIDIA driver. Picking another one opens NVIDIA Control Panel to switch."
             },
             None,
             |ui| {
-                if ui
-                    .button(if is_vi { "Mở NVIDIA Control Panel" } else { "Open NVIDIA Control Panel" })
-                    .clicked()
-                {
-                    open_nvcp = true;
-                }
+                egui::ComboBox::from_id_salt("dash_mux")
+                    .selected_text(mux_label(selected))
+                    .show_ui(ui, |ui| {
+                        for m in [MuxMode::Automatic, MuxMode::HybridOptimus, MuxMode::DiscreteGpuOnly] {
+                            ui.selectable_value(&mut selected, m, mux_label(m));
+                        }
+                    });
             },
         );
-        if open_nvcp && !puwvga_win32::open_nvidia_control_panel() {
-            state.set_toast(if is_vi {
-                "Không mở được NVIDIA Control Panel"
+        // No public API switches the MUX; NVIDIA Control Panel does it, and the dropdown
+        // re-reads the driver state when the app regains focus.
+        if selected != mode {
+            state.set_toast(if !puwvga_win32::open_nvidia_control_panel() {
+                if is_vi { "Không mở được NVIDIA Control Panel".to_string() } else { "Could not open NVIDIA Control Panel".to_string() }
+            } else if is_vi {
+                format!("Chọn \"{}\" trong Manage Display mode rồi bấm Apply", mux_label(selected))
             } else {
-                "Could not open NVIDIA Control Panel"
+                format!("Pick \"{}\" under Manage Display mode, then Apply", mux_label(selected))
             });
         }
     } else if let Some(gpu) = adapters.first() {
