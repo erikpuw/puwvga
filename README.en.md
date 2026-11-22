@@ -1,102 +1,101 @@
-# puwvga
-
-<p align="left">
-  <img src="assets/puwvga-256.png" alt="puwvga icon" width="72" />
+<p align="center">
+  <img src="assets/puwvga-256.png" width="112" alt="puwvga icon">
 </p>
 
-**English** | [Tiếng Việt](README.md)
+<h1 align="center">puwvga</h1>
 
-`puwvga` is a unified GPU configuration control panel for Windows 10 and Windows 11. It supports Intel, NVIDIA, and AMD graphics adapters inside a single native executable.
+<p align="center"><b>One control panel for Intel, NVIDIA and AMD.</b></p>
 
-The application talks directly to the vendor libraries shipped with your graphics drivers (`ControlLib.dll`, `nvapi64.dll`, `atiadlxx.dll`) alongside native Windows display APIs (DXGI, CCD, and Gamma Ramp). The UI is written in Rust (`eframe`/`egui`) with a statically linked VC++ runtime, no WebView dependency, and no background service after you close the window.
+<p align="center">
+  Color, resolution, scaling, Display Mode (MUX) and each vendor's 3D settings, in a single window.<br>
+  Written in Rust, ~3.6 MB exe, no WebView, nothing left running in the background, no Visual C++ Redistributable needed.
+</p>
 
-## Screenshots
+<p align="center"><a href="README.md">Tiếng Việt</a> · <b>English</b> · <a href="docs/releases/v1.0.4.md">Latest release: v1.0.4</a></p>
 
-### Hardware overview
+> I got tired of every GPU vendor having its own control panel, so the idea was to bring all the settings into one place.
+>
+> erikpuw
 
-![puwvga Hardware Overview](assets/screenshots/dashboard-en.png)
+> **Download only from the author.** puwvga is published by its author (erikpuw) only at [github.com/erikpuw/puwvga](https://github.com/erikpuw/puwvga). Copies from anywhere else (download sites, other repositories, repackaged builds, files passed around online) are outside the author's control and not guaranteed: they may have been modified or had code injected. Use only the builds under this repository's [Releases](https://github.com/erikpuw/puwvga/releases).
 
-### Color and brightness
-
-![puwvga Color and Brightness](assets/screenshots/color-en.png)
-
-### 3D and Video settings
-
-![puwvga 3D and Video](assets/screenshots/graphics-en.png)
+![Hardware overview](assets/screenshots/dashboard-en.png)
 
 ## Features
 
-### Hardware detection and display mapping
+| Feature | What it does |
+|---|---|
+| **GPU detection** | Finds every GPU in the machine (single-GPU desktop or iGPU + dGPU laptop) and maps each display to the GPU that drives it. |
+| **Color** | Brightness, contrast and gamma through the Windows gamma ramp, for every vendor. Saturation and hue through the driver: Intel IGCL's HueSat block, NVIDIA Digital Vibrance, AMD `ADL2_Display_Color_Set`. Intel also gets LACE (Dynamic Contrast Enhancement). |
+| **Color follows the panel** | Color settings are stored per panel EDID, not per GPU. After a MUX switch, coming back to the app re-applies them on the new GPU. |
+| **Display Mode (MUX)** | Pick Auto, Optimus or NVIDIA GPU and it switches right away, like NVIDIA App's Apply button. Requires NVIDIA App; without it the app opens NVIDIA Control Panel. |
+| **Resolution** | Changes resolution and refresh rate through Windows CCD, with a 15-second auto-revert if you don't confirm. |
+| **Scaling, Sharpness** | Intel: scaling, Retro/Integer Scaling and sharpness through IGCL. NVIDIA and AMD: scaling through Windows CCD. |
+| **G-SYNC** | Turns global G-SYNC on or off through DRS (`VRR_MODE`). |
+| **NVIDIA 3D settings** | Written straight to DRS, with IDs and values checked against the driver itself: VSync, Low Latency, Max FPS, Background FPS, power management, texture filtering, anisotropic filtering, Threaded Optimization, Shader Cache, FXAA, DLSS Override (preset, Super Resolution, Frame Generation). |
+| **Intel 3D settings** | Reads hardware capability flags for Flip Mode/VSync, Low Latency, Frame Limit, CMAA, Adaptive Tessellation, Sharpening, Endurance Gaming and the Video Processing group. |
+| **Auto-apply color** | The `puwvga_ApplyColor` Task Scheduler task runs `puwvga.exe --apply-only` on logon and unlock, applies color and exits. |
+| **Two languages, light and dark** | Switch between Tiếng Việt and English in Settings. Light and dark theme follow Windows 11. |
+| **Presets** | Every change is saved to `puwvga.presets.json` next to the exe, or `%APPDATA%\puwvga\` when that folder is read-only. |
 
-`puwvga` detects every installed GPU on single-GPU desktops and dual-GPU laptops (iGPU plus dGPU), then maps each active display to the adapter driving it.
+### Locked or not yet verified
 
-### Color and brightness
+These show up in the UI but are not written to the driver yet, or have not been tested on real hardware:
 
-- Adjust Brightness, Contrast, Gamma, Saturation or Digital Vibrance, and Hue per display.
-- Intel: writes Saturation and Hue directly to the hardware 3x3 CSC matrix block via `ctlPixelTransformationSetConfig`, toggles Dynamic Contrast Enhancement (LACE) via IGCL, and applies Brightness, Contrast, and Gamma through the display LUT.
-- NVIDIA: reads and writes Digital Vibrance directly via `NvAPI_GetDVCInfoEx` and `NvAPI_SetDVCLevelEx`.
-- Configure output wire format including Color Depth, Color Format (RGB/YCbCr), and Dynamic Range (Full 0-255 or Limited 16-235).
+- **Display spanning** (NVIDIA Mosaic, Intel Combined Display, AMD Eyefinity): layout preview only. The driver spanning call is locked until it is tested on a multi-monitor machine.
+- **Intel VRR, AMD FreeSync**: no switch API wired yet, locked.
+- **AMD**: color follows the ADL SDK but has not been tested on AMD hardware. AMD 3D and Video settings are only stored in the preset.
+- **Some NVIDIA items** such as Smooth Motion, DSR, RTX HDR, RTX Dynamic Vibrance and the Video group: only stored in the preset.
 
-### Display modes, spanning, and MUX
+## Screenshots
 
-- Change resolution and refresh rate (Windows CCD, with a 15-second auto-revert if unconfirmed).
-- Scaling: Intel goes through IGCL (including Retro/Integer Scaling), NVIDIA and AMD through Windows CCD. Intel Sharpness uses IGCL. NVIDIA G-SYNC uses DRS (`VRR_MODE`). Intel VRR and AMD FreeSync have no switch API wired yet, so they are locked.
-- Show the current Display mode (MUX) on dual-GPU laptops (Automatic Select, Optimus, or NVIDIA GPU only), read from the state the NVIDIA driver persists. Picking Auto, Optimus, or NVIDIA GPU switches right away like NVIDIA App, through the `NvCpl.dll` that ships with NVIDIA App (`NvCplApiSetSetting` setting `0x332` + `NvCplApiExecute`, the same calls NVIDIA App makes). Without NVIDIA App installed, the app opens NVIDIA Control Panel instead.
-- Color settings follow the physical panel (its EDID identity), not the GPU. After a MUX switch, returning to the app re-applies the saved colors on the new GPU.
-- Multi-display spanning (NVIDIA Mosaic, Intel Combined Display, AMD Eyefinity) only previews the layout for now. The driver spanning calls have not been verified on a multi-monitor machine, so the switch is locked.
+| Color and brightness | 3D and Video |
+|---|---|
+| ![Color and brightness](assets/screenshots/color-en.png) | ![3D and Video](assets/screenshots/graphics-en.png) |
 
-### Vendor-native 3D and Video settings
+## Install and use
 
-- NVIDIA (`nvapi64.dll` and DRS `nvdrsdb.bin`): supports Global and Per-App profiles with 20 Driver Settings (DLSS Override, Smooth Motion, Low Latency Mode, DSR, Image Scaling, RTX Dynamic Vibrance, RTX HDR, and more), 11 collapsible Legacy Settings, and 3 Video settings.
-- Intel (`ControlLib.dll` IGCL): queries hardware capability flags for 3D features (Flip Mode/VSync, Low Latency, Frame Limit, CMAA, Adaptive Tessellation, Sharpening, Endurance Gaming) and Video Processing (Super Resolution, Film Mode, Denoise, Adaptive Sharpening).
-- AMD (`atiadlxx.dll` ADL2): sets saturation, hue, and color temperature on the selected display through `ADL2_Display_Color_Set`, within the range the driver reports. It follows the ADL SDK but has not been tested on AMD hardware yet. AMD 3D Gaming and Video options are only stored in the preset for now and are not written to the driver.
+1. Download one of these from [Releases](https://github.com/erikpuw/puwvga/releases):
+   - `puwvga-v1.0.4-portable-x64.exe`: runs as is, nothing to install.
+   - `puwvga-setup-v1.0.4-x64.exe`: installer with Start Menu and Desktop shortcuts and an entry under Windows Settings > Apps for uninstalling.
+2. Open the app, pick a display on the Color or Display page and adjust. Changes are saved immediately.
+3. To have color re-applied after logon or unlock, turn on **Auto-apply color on logon and unlock** in Settings.
 
-### Interface, localization, and presets
+Releases are not code-signed yet. On first run Windows SmartScreen may show "Windows protected your PC": choose **More info**, then **Run anyway** if you downloaded it from this repository.
 
-- Dark and Light themes synchronized with Windows 11.
-- Instant language switching between Vietnamese and English in Settings.
-- Changes are saved automatically to `puwvga.presets.json` next to the executable (falling back to `%APPDATA%\puwvga\` when the install folder is read-only) and restored on the next launch.
-- Optional Windows Task Scheduler integration (`puwvga_ApplyColor` running `puwvga.exe --apply-only` on logon and session unlock) re-applies color settings automatically and exits immediately with no background process.
+## What puwvga does not do
 
-## Intentional omissions
+puwvga only configures displays and drivers. It does not load `nvml.dll`, read temperatures, clocks or fan speeds, draw an overlay, record the screen, ask for an account, overclock, or edit game config files. Closing the window exits the app.
 
-`puwvga` focuses strictly on display and driver configuration. It does not load `nvml.dll`, poll hardware telemetry (temperatures, clocks, power, or fan speeds), inject overlays, record video, require an account, overclock hardware, or edit game config files.
+## Source layout
 
-## Download and installation
+| Crate | Role |
+|---|---|
+| `puwvga-core` | Data model, `GpuBackend` trait, `SettingDescriptor`, VI/EN strings, preset JSON. |
+| `puwvga-win32` | DXGI, Windows CCD (resolution, scaling, display mapping), gamma ramp, theme, Task Scheduler. |
+| `puwvga-intel` | Loads `ControlLib.dll` (Intel IGCL) at runtime. |
+| `puwvga-nvidia` | Loads `nvapi64.dll`, DRS, and NVIDIA App's `NvCpl.dll` for Display Mode. |
+| `puwvga-amd` | Loads `atiadlxx.dll` (AMD ADL2) at runtime. |
+| `puwvga-ui` | `eframe`/`egui` user interface. |
+| `puwvga-installer` | Installer and uninstaller written in Rust. |
 
-Prebuilt binaries are published on the [Releases](https://github.com/erikpuw/puwvga/releases) page:
+`installer/puwvga.iss` is a backup Inno Setup 6 script for packaging.
 
-- `puwvga-v1.0.4-portable-x64.exe`: standalone portable executable, no installation required.
-- `puwvga-setup-v1.0.4-x64.exe`: Windows installer that creates Start Menu and Desktop shortcuts and registers an uninstaller in Windows Settings (Apps).
+## Building
 
-Note: release binaries are currently unsigned. Windows SmartScreen may show a "Windows protected your PC" prompt on the first launch. Choose **More info** and click **Run anyway** to proceed.
-
-## Workspace layout
-
-- `crates/puwvga-core`: shared data models, `GpuBackend` trait, `SettingDescriptor` schema, VI/EN strings, and JSON preset persistence.
-- `crates/puwvga-win32`: DXGI GPU enumeration, Win32 CCD display mapping and mode switching, Gamma Ramp read/write, and Windows theme detection.
-- `crates/puwvga-intel`: dynamic FFI loader for `ControlLib.dll` (Intel IGCL).
-- `crates/puwvga-nvidia`: dynamic FFI loader for `nvapi64.dll` and DRS `nvdrsdb.bin`.
-- `crates/puwvga-amd`: dynamic FFI loader for `atiadlxx.dll` (AMD ADL2).
-- `crates/puwvga-ui`: native Rust GUI (`eframe`/`egui`).
-- `crates/puwvga-installer`: native Rust Windows installer and uninstaller.
-- `installer/puwvga.iss`: optional Inno Setup 6 packaging script.
-
-## Building from source
-
-Requires the Rust toolchain with target `x86_64-pc-windows-msvc` and the Windows 10/11 SDK (`rc.exe`). `.cargo/config.toml` enables `-C target-feature=+crt-static` so the VC++ runtime is linked statically.
+You need the Rust `x86_64-pc-windows-msvc` target and the Windows 10/11 SDK (`rc.exe`). `.cargo/config.toml` already sets `-C target-feature=+crt-static` to link the VC++ runtime statically.
 
 ```powershell
-# Run all unit tests
+# Run all tests
 cargo test --workspace
 
-# Build the portable executable
+# Build the portable exe
 cargo build --release -p puwvga-ui
 
-# Build the Windows installer (after building puwvga-ui)
+# Build the installer (after building puwvga-ui)
 cargo build --release -p puwvga-installer
 ```
 
 ## License
 
-Licensed under the [Apache License 2.0](LICENSE).
+[Apache License 2.0](LICENSE).
