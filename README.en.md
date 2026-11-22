@@ -55,9 +55,7 @@ These show up in the UI but are not written to the driver yet, or have not been 
 
 ## Install and use
 
-1. Download one of these from [Releases](https://github.com/erikpuw/puwvga/releases):
-   - `puwvga-v1.0.4-portable-x64.exe`: runs as is, nothing to install.
-   - `puwvga-setup-v1.0.4-x64.exe`: installer with Start Menu and Desktop shortcuts and an entry under Windows Settings > Apps for uninstalling.
+1. Download `puwvga-setup-v1.0.4-x64.exe` from [Releases](https://github.com/erikpuw/puwvga/releases) and run it to install (creates Start Menu and Desktop shortcuts and an entry under Windows Settings > Apps for uninstalling).
 2. Open the app, pick a display on the Color or Display page and adjust. Changes are saved immediately.
 3. To have color re-applied after logon or unlock, turn on **Auto-apply color on logon and unlock** in Settings.
 
@@ -89,7 +87,7 @@ You need the Rust `x86_64-pc-windows-msvc` target and the Windows 10/11 SDK (`rc
 # Run all tests
 cargo test --workspace
 
-# Build the portable exe
+# Build the app
 cargo build --release -p puwvga-ui
 
 # Build the installer (after building puwvga-ui)

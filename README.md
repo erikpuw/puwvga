@@ -55,9 +55,7 @@ Những mục dưới đây hiện trong giao diện nhưng chưa ghi xuống dr
 
 ## Cài đặt và dùng
 
-1. Tải từ mục [Releases](https://github.com/erikpuw/puwvga/releases) một trong hai bản:
-   - `puwvga-v1.0.4-portable-x64.exe`: chạy thẳng, không cần cài.
-   - `puwvga-setup-v1.0.4-x64.exe`: bản cài, có lối tắt Start Menu, Desktop và mục gỡ cài trong Windows Settings.
+1. Tải `puwvga-setup-v1.0.4-x64.exe` từ mục [Releases](https://github.com/erikpuw/puwvga/releases) rồi chạy để cài đặt (có lối tắt Start Menu, Desktop và mục gỡ cài trong Windows Settings).
 2. Mở app, chọn màn hình ở trang Màu sắc hoặc Màn hình rồi chỉnh. Thay đổi được lưu ngay.
 3. Muốn màu tự áp lại sau khi đăng nhập hoặc mở khóa máy, bật **Tự áp màu khi đăng nhập và mở khóa máy** trong Cài đặt.
 
@@ -89,7 +87,7 @@ Cần Rust target `x86_64-pc-windows-msvc` và Windows 10/11 SDK (`rc.exe`). `.c
 # Chạy toàn bộ test
 cargo test --workspace
 
-# Build bản portable
+# Build ứng dụng
 cargo build --release -p puwvga-ui
 
 # Build trình cài đặt (sau khi đã build puwvga-ui)
