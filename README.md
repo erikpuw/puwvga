@@ -8,7 +8,7 @@
 
 <p align="center">
   Màu sắc, độ phân giải, scaling, Display Mode (MUX) và thiết lập 3D của từng hãng, gom vào một cửa sổ.<br>
-  Viết bằng Rust, exe ~3,6 MB, không WebView, không chạy nền, không cần cài Visual C++ Redistributable.
+  Viết bằng Rust, bộ cài ~2,3 MB, không WebView, không chạy nền, không cần cài Visual C++ Redistributable.
 </p>
 
 <p align="center"><b>Tiếng Việt</b> · <a href="README.en.md">English</a> · <a href="docs/releases/v1.0.4.md">Bản mới nhất: v1.0.4</a></p>
@@ -55,9 +55,10 @@ Những mục dưới đây hiện trong giao diện nhưng chưa ghi xuống dr
 
 ## Cài đặt và dùng
 
-1. Tải `puwvga-setup-v1.0.4-x64.exe` từ mục [Releases](https://github.com/erikpuw/puwvga/releases) rồi chạy để cài đặt (có lối tắt Start Menu, Desktop và mục gỡ cài trong Windows Settings).
-2. Mở app, chọn màn hình ở trang Màu sắc hoặc Màn hình rồi chỉnh. Thay đổi được lưu ngay.
-3. Muốn màu tự áp lại sau khi đăng nhập hoặc mở khóa máy, bật **Tự áp màu khi đăng nhập và mở khóa máy** trong Cài đặt.
+1. Nếu puwvga đang mở, đóng app trước khi chạy bộ cài để ghi đè file.
+2. Tải `puwvga-setup-v1.0.4-x64.exe` (~2,3 MB) từ mục [Releases](https://github.com/erikpuw/puwvga/releases) rồi chạy để cài đặt (có lối tắt Start Menu, Desktop và mục gỡ cài trong Windows Settings).
+3. Mở app, chọn màn hình ở trang Màu sắc hoặc Màn hình rồi chỉnh. Thay đổi được lưu ngay.
+4. Muốn màu tự áp lại sau khi đăng nhập hoặc mở khóa máy, bật **Tự áp màu khi đăng nhập và mở khóa máy** trong Cài đặt.
 
 Bản phát hành chưa có chữ ký số. Lần chạy đầu Windows SmartScreen có thể hiện "Windows protected your PC": chọn **More info** rồi **Run anyway** nếu bạn tải từ kho này.
 

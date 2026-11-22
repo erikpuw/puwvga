@@ -8,7 +8,7 @@
 
 <p align="center">
   Color, resolution, scaling, Display Mode (MUX) and each vendor's 3D settings, in a single window.<br>
-  Written in Rust, ~3.6 MB exe, no WebView, nothing left running in the background, no Visual C++ Redistributable needed.
+  Written in Rust, ~2.3 MB installer, no WebView, nothing left running in the background, no Visual C++ Redistributable needed.
 </p>
 
 <p align="center"><a href="README.md">Tiếng Việt</a> · <b>English</b> · <a href="docs/releases/v1.0.4.md">Latest release: v1.0.4</a></p>
@@ -55,9 +55,10 @@ These show up in the UI but are not written to the driver yet, or have not been 
 
 ## Install and use
 
-1. Download `puwvga-setup-v1.0.4-x64.exe` from [Releases](https://github.com/erikpuw/puwvga/releases) and run it to install (creates Start Menu and Desktop shortcuts and an entry under Windows Settings > Apps for uninstalling).
-2. Open the app, pick a display on the Color or Display page and adjust. Changes are saved immediately.
-3. To have color re-applied after logon or unlock, turn on **Auto-apply color on logon and unlock** in Settings.
+1. If puwvga is already running, close it first so the installer can replace the exe.
+2. Download `puwvga-setup-v1.0.4-x64.exe` (~2.3 MB) from [Releases](https://github.com/erikpuw/puwvga/releases) and run it to install (creates Start Menu and Desktop shortcuts and an entry under Windows Settings > Apps for uninstalling).
+3. Open the app, pick a display on the Color or Display page and adjust. Changes are saved immediately.
+4. To have color re-applied after logon or unlock, turn on **Auto-apply color on logon and unlock** in Settings.
 
 Releases are not code-signed yet. On first run Windows SmartScreen may show "Windows protected your PC": choose **More info**, then **Run anyway** if you downloaded it from this repository.
 
