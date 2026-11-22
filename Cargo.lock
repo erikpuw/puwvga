@@ -1589,8 +1589,6 @@ dependencies = [
 name = "puwvga-installer"
 version = "1.0.4"
 dependencies = [
- "eframe",
- "egui",
  "flate2",
  "puwvga-win32",
  "windows",
