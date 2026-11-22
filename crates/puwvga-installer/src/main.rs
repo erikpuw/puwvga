@@ -379,6 +379,7 @@ fn main() -> eframe::Result<()> {
             .with_icon(Arc::new(load_window_icon()))
             .with_inner_size(Vec2::new(520.0, 365.0))
             .with_resizable(false),
+        centered: true,
         ..Default::default()
     };
 
