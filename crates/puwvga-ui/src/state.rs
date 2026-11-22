@@ -6,6 +6,7 @@ use puwvga_core::{
     ThemePreference, Vendor,
 };
 use puwvga_intel::IntelBackend;
+use puwvga_nvidia::dds::{Dds, MUX_DGPU, MUX_IGPU};
 use puwvga_nvidia::NvidiaBackend;
 use puwvga_win32::{
     apply_display_mode, apply_gamma_ramp, enumerate_active_displays, enumerate_dxgi_adapters,
@@ -83,14 +84,19 @@ pub struct AppState {
     pub startup_task_enabled: bool,
     /// NVIDIA "Manage Display mode" as persisted by the driver; `None` without NVIDIA hybrid graphics.
     pub mux_mode: Option<MuxMode>,
+    /// NVIDIA App's NvCpl.dll DDS bridge; `None` without NVIDIA App (switching then falls back
+    /// to opening NVIDIA Control Panel).
+    pub dds: Option<Dds>,
+    /// A MUX switch moves the panel between GPUs a moment later; re-scan hardware then.
+    pub mux_refresh_at: Option<Instant>,
 }
 
-fn read_mux_mode() -> Option<MuxMode> {
-    read_nvidia_mux_state().map(|(state, automatic)| match (automatic, state) {
+fn mux_mode_from(automatic: bool, mux: u32) -> MuxMode {
+    match (automatic, mux) {
         (true, _) => MuxMode::Automatic,
-        (false, 2) => MuxMode::DiscreteGpuOnly,
+        (false, MUX_DGPU) => MuxMode::DiscreteGpuOnly,
         _ => MuxMode::HybridOptimus,
-    })
+    }
 }
 
 impl AppState {
@@ -137,6 +143,8 @@ impl AppState {
             needs_admin_banner: false,
             startup_task_enabled: is_apply_on_startup_enabled(),
             mux_mode: None,
+            dds: Dds::load(),
+            mux_refresh_at: None,
         };
 
         state.init_backends();
@@ -183,12 +191,42 @@ impl AppState {
         }
     }
 
+    fn read_mux_mode(&self) -> Option<MuxMode> {
+        self.dds
+            .as_ref()
+            .and_then(Dds::state)
+            .map(|s| mux_mode_from(s.automatic, s.mux))
+            .or_else(|| read_nvidia_mux_state().map(|(state, automatic)| mux_mode_from(automatic, state)))
+    }
+
+    /// Switches NVIDIA Display Mode the way NVIDIA App's Apply does. Returns `false` when NVIDIA
+    /// App's NvCpl.dll is unavailable, so the caller can fall back to NVIDIA Control Panel.
+    pub fn set_mux_mode(&mut self, mode: MuxMode) -> bool {
+        let Some(dds) = &self.dds else {
+            return false;
+        };
+        let current = dds.state().map_or(MUX_IGPU, |s| s.mux);
+        let (automatic, mux) = match mode {
+            MuxMode::Automatic => (true, current),
+            MuxMode::HybridOptimus => (false, MUX_IGPU),
+            MuxMode::DiscreteGpuOnly => (false, MUX_DGPU),
+        };
+        let res = dds.set(automatic, mux);
+        if res.is_ok() {
+            self.mux_mode = Some(mode);
+            self.mux_refresh_at = Some(Instant::now() + Duration::from_secs(2));
+        }
+        let msg = if self.language == Language::Vi { "Đã chuyển Display Mode" } else { "Display Mode switched" };
+        self.handle_backend_result(res, msg);
+        true
+    }
+
     /// Re-reads hardware when the display topology changed while the app was in the background
     /// (e.g. a MUX switch moved the panel to the other GPU), which also re-applies saved colors.
     pub fn refresh_if_topology_changed(&mut self) {
         let ids = |v: &[DisplayOutputInfo]| v.iter().map(|d| d.id.clone()).collect::<Vec<_>>();
         let live = enumerate_active_displays().unwrap_or_default();
-        if ids(&live) != ids(&self.displays) || read_mux_mode() != self.mux_mode {
+        if ids(&live) != ids(&self.displays) || self.read_mux_mode() != self.mux_mode {
             self.refresh_hardware();
         }
     }
@@ -196,7 +234,7 @@ impl AppState {
     /// Reads static GPU & display topology once on startup or explicit refresh (zero background polling).
     pub fn refresh_hardware(&mut self) {
         self.system_dark = is_windows_dark_mode();
-        self.mux_mode = read_mux_mode();
+        self.mux_mode = self.read_mux_mode();
         self.displays = enumerate_active_displays().unwrap_or_default();
 
         let dxgi_list = enumerate_dxgi_adapters().unwrap_or_default();

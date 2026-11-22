@@ -48,6 +48,14 @@ impl eframe::App for PuwvgaApp {
             self.state.refresh_if_topology_changed();
         }
         self.focused = focused;
+        if let Some(at) = self.state.mux_refresh_at {
+            if Instant::now() >= at {
+                self.state.mux_refresh_at = None;
+                self.state.refresh_hardware();
+            } else {
+                ctx.request_repaint_after(Duration::from_millis(250));
+            }
+        }
 
         let dark = self.state.is_dark();
         let p = Palette::for_mode(dark);

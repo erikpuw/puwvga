@@ -103,9 +103,9 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
             IconKind::List,
             "Display Mode (MUX / Optimus)",
             if is_vi {
-                "Chế độ hiện tại đọc từ driver NVIDIA. Chọn chế độ khác sẽ mở NVIDIA Control Panel để chuyển."
+                "Chuyển giữa Auto, Optimus và NVIDIA GPU như NVIDIA App (cần cài NVIDIA App)."
             } else {
-                "Current mode is read from the NVIDIA driver. Picking another one opens NVIDIA Control Panel to switch."
+                "Switch between Auto, Optimus and NVIDIA GPU like NVIDIA App does (requires NVIDIA App)."
             },
             None,
             |ui| {
@@ -118,9 +118,8 @@ pub fn render(ui: &mut Ui, state: &mut AppState, p: Palette) {
                     });
             },
         );
-        // No public API switches the MUX; NVIDIA Control Panel does it, and the dropdown
-        // re-reads the driver state when the app regains focus.
-        if selected != mode {
+        // Switches through NVIDIA App's NvCpl.dll; without NVIDIA App, open NVIDIA Control Panel.
+        if selected != mode && !state.set_mux_mode(selected) {
             state.set_toast(if !puwvga_win32::open_nvidia_control_panel() {
                 if is_vi { "Không mở được NVIDIA Control Panel".to_string() } else { "Could not open NVIDIA Control Panel".to_string() }
             } else if is_vi {

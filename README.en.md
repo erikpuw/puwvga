@@ -41,7 +41,7 @@ The application talks directly to the vendor libraries shipped with your graphic
 
 - Change resolution and refresh rate (Windows CCD, with a 15-second auto-revert if unconfirmed).
 - Scaling: Intel goes through IGCL (including Retro/Integer Scaling), NVIDIA and AMD through Windows CCD. Intel Sharpness uses IGCL. NVIDIA G-SYNC uses DRS (`VRR_MODE`). Intel VRR and AMD FreeSync have no switch API wired yet, so they are locked.
-- Show the current Display mode (MUX) on dual-GPU laptops (Automatic Select, Optimus, or NVIDIA GPU only), read from the state the NVIDIA driver persists. The three-option dropdown shows the active mode. NVIDIA has no public API to switch it, so picking another option opens NVIDIA Control Panel to switch.
+- Show the current Display mode (MUX) on dual-GPU laptops (Automatic Select, Optimus, or NVIDIA GPU only), read from the state the NVIDIA driver persists. Picking Auto, Optimus, or NVIDIA GPU switches right away like NVIDIA App, through the `NvCpl.dll` that ships with NVIDIA App (`NvCplApiSetSetting` setting `0x332` + `NvCplApiExecute`, the same calls NVIDIA App makes). Without NVIDIA App installed, the app opens NVIDIA Control Panel instead.
 - Color settings follow the physical panel (its EDID identity), not the GPU. After a MUX switch, returning to the app re-applies the saved colors on the new GPU.
 - Multi-display spanning (NVIDIA Mosaic, Intel Combined Display, AMD Eyefinity) only previews the layout for now. The driver spanning calls have not been verified on a multi-monitor machine, so the switch is locked.
 
