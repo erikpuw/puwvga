@@ -1,96 +1,95 @@
-# puwvga
-
-<p align="left">
-  <img src="assets/puwvga-256.png" alt="puwvga icon" width="72" />
+<p align="center">
+  <img src="assets/puwvga-256.png" width="112" alt="Biểu tượng puwvga">
 </p>
 
-[English](README.en.md) | **Tiếng Việt**
+<h1 align="center">puwvga</h1>
 
-`puwvga` là ứng dụng điều khiển cấu hình VGA tập trung cho Windows 10 và Windows 11, hỗ trợ đồng thời ba hãng Intel, NVIDIA và AMD trong một chương trình duy nhất.
+<p align="center"><b>Một bảng điều khiển cho cả Intel, NVIDIA và AMD.</b></p>
 
-Ứng dụng giao tiếp trực tiếp với các thư viện chính thức có sẵn trong driver (`ControlLib.dll`, `nvapi64.dll`, `atiadlxx.dll`) và các API hiển thị của Windows (DXGI, CCD, Gamma Ramp). Phần giao diện viết bằng Rust (`eframe`/`egui`), liên kết tĩnh VC++ Runtime, không dùng WebView và không chạy tiến trình nền sau khi đóng cửa sổ.
+<p align="center">
+  Màu sắc, độ phân giải, scaling, Display Mode (MUX) và thiết lập 3D của từng hãng, gom vào một cửa sổ.<br>
+  Viết bằng Rust, exe ~3,6 MB, không WebView, không chạy nền, không cần cài Visual C++ Redistributable.
+</p>
 
-## Ảnh chụp giao diện
+<p align="center"><b>Tiếng Việt</b> · <a href="README.en.md">English</a> · <a href="docs/releases/v1.0.4.md">Bản mới nhất: v1.0.4</a></p>
 
-### Tổng quan phần cứng
+> Tôi mệt mỏi với các điều khiển VGA của từng hãng, nên ý tưởng xuất phát các điều chỉnh về một nơi.
+>
+> erikpuw
 
-![Tổng quan phần cứng puwvga](assets/screenshots/dashboard-vi.png)
+> **Chỉ tải từ nguồn của tác giả.** puwvga do tác giả (erikpuw) phát hành duy nhất tại [github.com/erikpuw/puwvga](https://github.com/erikpuw/puwvga). Bản tải từ nơi khác (trang chia sẻ, kho khác, bản đóng gói lại, tệp gửi qua mạng) không do tác giả kiểm soát và không được đảm bảo: có thể đã bị sửa đổi hoặc chèn thêm mã. Hãy chỉ dùng bản ở mục [Releases](https://github.com/erikpuw/puwvga/releases) của kho này.
 
-### Màu sắc và độ sáng
-
-![Màu sắc và độ sáng puwvga](assets/screenshots/color-vi.png)
-
-### Cấu hình 3D và Video
-
-![Cấu hình 3D và Video puwvga](assets/screenshots/graphics-vi.png)
+![Tổng quan phần cứng](assets/screenshots/dashboard-vi.png)
 
 ## Tính năng
 
-### Nhận diện phần cứng và ánh xạ màn hình
+| Tính năng | Làm gì |
+|---|---|
+| **Nhận diện GPU** | Tìm mọi GPU trên máy (máy bàn 1 VGA hoặc laptop iGPU + dGPU) và gán từng màn hình cho đúng GPU đang xuất hình. |
+| **Màu sắc** | Brightness, Contrast, Gamma qua Gamma Ramp của Windows, áp cho mọi hãng. Saturation và Hue qua driver: khối HueSat của Intel IGCL, Digital Vibrance của NVIDIA, `ADL2_Display_Color_Set` của AMD. Intel có thêm LACE (Dynamic Contrast Enhancement). |
+| **Màu đi theo màn** | Cấu hình màu lưu theo định danh EDID của tấm nền, không theo GPU. Đổi MUX xong quay lại app thì màu được áp lại lên GPU mới. |
+| **Display Mode (MUX)** | Chọn Auto, Optimus hoặc NVIDIA GPU là chuyển ngay, giống nút Apply của NVIDIA App. Cần cài NVIDIA App; không có thì app mở NVIDIA Control Panel. |
+| **Độ phân giải** | Đổi độ phân giải và tần số quét qua Windows CCD, tự hoàn tác sau 15 giây nếu chưa xác nhận. |
+| **Scaling, Sharpness** | Intel: Scaling, Retro/Integer Scaling và Sharpness qua IGCL. NVIDIA và AMD: Scaling qua Windows CCD. |
+| **G-SYNC** | Bật tắt G-SYNC toàn cục qua DRS (`VRR_MODE`). |
+| **Thiết lập 3D NVIDIA** | Ghi thẳng vào DRS với ID và giá trị đã đối chiếu từ chính driver: VSync, Low Latency, Max FPS, Background FPS, Power management, Texture filtering, Anisotropic, Threaded Optimization, Shader Cache, FXAA, DLSS Override (preset, Super Resolution, Frame Generation). |
+| **Thiết lập 3D Intel** | Đọc cờ hỗ trợ từ phần cứng cho Flip Mode/VSync, Low Latency, Frame Limit, CMAA, Adaptive Tessellation, Sharpening, Endurance Gaming và nhóm Video Processing. |
+| **Tự áp màu** | Tác vụ Task Scheduler `puwvga_ApplyColor` chạy `puwvga.exe --apply-only` khi đăng nhập hoặc mở khóa máy, áp màu xong thoát ngay. |
+| **Song ngữ, sáng tối** | Tiếng Việt / English đổi ngay trong Cài đặt. Giao diện sáng tối theo Windows 11. |
+| **Preset** | Mọi thay đổi tự lưu vào `puwvga.presets.json` cạnh file exe, hoặc `%APPDATA%\puwvga\` nếu thư mục chỉ đọc. |
 
-Ứng dụng tự phát hiện toàn bộ GPU có trên máy, bao gồm cấu hình máy bàn 1 VGA hoặc laptop 2 GPU (iGPU và dGPU), sau đó ánh xạ từng màn hình đang hoạt động tới đúng GPU chủ quản.
+### Còn khóa hoặc chưa kiểm chứng
 
-### Màu sắc và độ sáng
+Những mục dưới đây hiện trong giao diện nhưng chưa ghi xuống driver, hoặc chưa được thử trên máy thật:
 
-- Điều chỉnh Brightness, Contrast, Gamma, Saturation hoặc Digital Vibrance, và Hue theo từng màn hình.
-- Trên Intel: ghi trực tiếp Saturation và Hue xuống khối ma trận màu CSC 3x3 của driver qua `ctlPixelTransformationSetConfig`, bật/tắt Dynamic Contrast Enhancement (LACE) qua IGCL, và điều chỉnh Brightness/Contrast/Gamma qua LUT phần cứng.
-- Trên NVIDIA: đọc và ghi trực tiếp Digital Vibrance qua `NvAPI_GetDVCInfoEx` và `NvAPI_SetDVCLevelEx`.
-- Chọn định dạng tín hiệu màu đầu ra gồm Output Color Depth, Color Format (RGB/YCbCr) và Dynamic Range (Full 0-255 / Limited 16-235).
+- **Ghép màn hình** (NVIDIA Mosaic, Intel Combined Display, AMD Eyefinity): mới có phần xem trước bố cục. Lệnh ghép qua driver đang khóa vì chưa thử trên máy nhiều màn hình.
+- **VRR trên Intel, FreeSync trên AMD**: chưa có API bật tắt, đang khóa.
+- **AMD**: phần màu viết theo ADL SDK nhưng chưa thử trên máy AMD thật. Thiết lập 3D và Video của AMD mới chỉ lưu trong preset.
+- **Một số mục NVIDIA** như Smooth Motion, DSR, RTX HDR, RTX Dynamic Vibrance và nhóm Video: mới chỉ lưu trong preset.
 
-### Màn hình, ghép màn hình và MUX
+## Ảnh chụp
 
-- Đổi độ phân giải và tần số quét (Windows CCD, tự hoàn tác sau 15 giây nếu chưa xác nhận).
-- Scaling: Intel đi qua IGCL (gồm Retro/Integer Scaling), NVIDIA và AMD đi qua Windows CCD. Sharpness cho Intel qua IGCL. G-SYNC cho NVIDIA qua DRS (`VRR_MODE`). VRR trên Intel và FreeSync trên AMD chưa có API để bật tắt nên đang khóa.
-- Hiển thị chế độ Display mode (MUX) hiện tại trên laptop 2 GPU (Automatic Select, Optimus hoặc NVIDIA GPU only), đọc từ trạng thái mà driver NVIDIA lưu. Chọn Auto, Optimus hoặc NVIDIA GPU là chuyển ngay như NVIDIA App, qua `NvCpl.dll` đi kèm NVIDIA App (`NvCplApiSetSetting` setting `0x332` + `NvCplApiExecute`, cách NVIDIA App tự làm). Máy chưa cài NVIDIA App thì app mở NVIDIA Control Panel để chuyển.
-- Cấu hình màu đi theo màn hình vật lý (định danh EDID), không theo GPU. Sau khi đổi MUX, quay lại app thì màu đã lưu được áp lại lên GPU mới.
-- Ghép nhiều màn hình (NVIDIA Mosaic, Intel Combined Display, AMD Eyefinity) mới có phần xem trước bố cục. Lệnh ghép qua driver chưa được kiểm chứng trên máy nhiều màn hình nên đang khóa.
+| Màu sắc và độ sáng | Cấu hình 3D và Video |
+|---|---|
+| ![Màu sắc và độ sáng](assets/screenshots/color-vi.png) | ![Cấu hình 3D và Video](assets/screenshots/graphics-vi.png) |
 
-### Cấu hình 3D và Video theo từng hãng
+## Cài đặt và dùng
 
-- NVIDIA (`nvapi64.dll` và DRS `nvdrsdb.bin`): hỗ trợ Global và Per-App với 20 mục Driver Settings (DLSS Override, Smooth Motion, Low Latency Mode, DSR, Image Scaling, RTX Dynamic Vibrance, RTX HDR...), 11 mục Legacy Settings thu gọn được, và 3 mục Video.
-- Intel (`ControlLib.dll` IGCL): đọc cờ hỗ trợ trực tiếp từ phần cứng cho các tính năng 3D (Flip Mode/VSync, Low Latency, Frame Limit, CMAA, Adaptive Tessellation, Sharpening, Endurance Gaming) và Video Processing (Super Resolution, Film Mode, Denoise, Adaptive Sharpening).
-- AMD (`atiadlxx.dll` ADL2): chỉnh Saturation, Hue và nhiệt độ màu cho đúng màn hình đang chọn qua `ADL2_Display_Color_Set`, theo khoảng giá trị driver báo về. Phần này viết theo ADL SDK nhưng chưa được thử trên máy AMD thật. Các mục 3D Gaming và Video của AMD hiện chỉ lưu trong preset, chưa ghi vào driver.
+1. Tải từ mục [Releases](https://github.com/erikpuw/puwvga/releases) một trong hai bản:
+   - `puwvga-v1.0.4-portable-x64.exe`: chạy thẳng, không cần cài.
+   - `puwvga-setup-v1.0.4-x64.exe`: bản cài, có lối tắt Start Menu, Desktop và mục gỡ cài trong Windows Settings.
+2. Mở app, chọn màn hình ở trang Màu sắc hoặc Màn hình rồi chỉnh. Thay đổi được lưu ngay.
+3. Muốn màu tự áp lại sau khi đăng nhập hoặc mở khóa máy, bật **Tự áp màu khi đăng nhập và mở khóa máy** trong Cài đặt.
 
-### Giao diện, song ngữ và lưu cấu hình
+Bản phát hành chưa có chữ ký số. Lần chạy đầu Windows SmartScreen có thể hiện "Windows protected your PC": chọn **More info** rồi **Run anyway** nếu bạn tải từ kho này.
 
-- Giao diện tối và sáng đồng bộ với Windows 11.
-- Chuyển đổi trực tiếp giữa Tiếng Việt và English trong mục Cài đặt.
-- Mọi thay đổi được tự động lưu vào `puwvga.presets.json` đặt cạnh file `.exe` (tự chuyển sang `%APPDATA%\puwvga\` nếu thư mục cài đặt chỉ đọc) và khôi phục lại ở lần mở tiếp theo.
-- Hỗ trợ tùy chọn tự áp màu cùng Windows qua Task Scheduler (`puwvga_ApplyColor` gọi `puwvga.exe --apply-only` khi đăng nhập hoặc mở khóa máy, áp xong thoát ngay, không chạy tiến trình nền).
+## puwvga không làm gì
 
-## Phạm vi loại trừ
-
-`puwvga` chỉ làm nhiệm vụ cấu hình hiển thị và driver. Ứng dụng không nạp `nvml.dll`, không đọc cảm biến nhiệt độ, xung nhịp hay tốc độ quạt chạy nền, không có lớp phủ overlay, không quay màn hình, không yêu cầu đăng nhập tài khoản, không ép xung và không tự chỉnh file cấu hình game.
-
-## Cài đặt và sử dụng
-
-Bạn có thể tải bản phát hành mới nhất tại mục [Releases](https://github.com/erikpuw/puwvga/releases):
-
-- `puwvga-v1.0.4-portable-x64.exe`: chạy trực tiếp, không cần cài đặt.
-- `puwvga-setup-v1.0.4-x64.exe`: bản cài đặt vào máy, tạo lối tắt Start Menu, Desktop và mục gỡ cài đặt trong Windows Settings (Apps).
-
-Lưu ý: các bản dựng hiện tại chưa có chữ ký số (unsigned). Windows SmartScreen có thể hiển thị cảnh báo "Windows protected your PC" ở lần chạy đầu tiên; chọn **More info** rồi nhấn **Run anyway** nếu bạn tin cậy bản phát hành từ kho mã nguồn này.
+puwvga chỉ cấu hình hiển thị và driver. App không nạp `nvml.dll`, không đọc nhiệt độ, xung nhịp hay tốc độ quạt, không có overlay, không quay màn hình, không cần đăng nhập tài khoản, không ép xung và không sửa file cấu hình game. Đóng cửa sổ là thoát hẳn.
 
 ## Cấu trúc mã nguồn
 
-- `crates/puwvga-core`: mô hình dữ liệu, trait `GpuBackend`, schema cấu hình `SettingDescriptor`, song ngữ VI/EN và lưu Preset JSON.
-- `crates/puwvga-win32`: liệt kê GPU qua DXGI, ánh xạ màn hình và đổi độ phân giải/Hz qua Win32 CCD, đọc/ghi Gamma Ramp và đọc theme Windows.
-- `crates/puwvga-intel`: FFI động nạp `ControlLib.dll` (Intel IGCL).
-- `crates/puwvga-nvidia`: FFI động nạp `nvapi64.dll` và DRS `nvdrsdb.bin`.
-- `crates/puwvga-amd`: FFI động nạp `atiadlxx.dll` (AMD ADL2).
-- `crates/puwvga-ui`: giao diện ứng dụng viết bằng Rust (`eframe`/`egui`).
-- `crates/puwvga-installer`: trình cài đặt và gỡ cài đặt Windows viết bằng Rust thuần.
-- `installer/puwvga.iss`: script Inno Setup 6 bổ sung cho quy trình đóng gói.
+| Crate | Vai trò |
+|---|---|
+| `puwvga-core` | Mô hình dữ liệu, trait `GpuBackend`, `SettingDescriptor`, song ngữ VI/EN, Preset JSON. |
+| `puwvga-win32` | DXGI, Windows CCD (độ phân giải, scaling, ánh xạ màn hình), Gamma Ramp, theme, Task Scheduler. |
+| `puwvga-intel` | Nạp động `ControlLib.dll` (Intel IGCL). |
+| `puwvga-nvidia` | Nạp động `nvapi64.dll`, DRS và `NvCpl.dll` của NVIDIA App cho Display Mode. |
+| `puwvga-amd` | Nạp động `atiadlxx.dll` (AMD ADL2). |
+| `puwvga-ui` | Giao diện `eframe`/`egui`. |
+| `puwvga-installer` | Trình cài và gỡ cài viết bằng Rust. |
 
-## Tự build từ mã nguồn
+`installer/puwvga.iss` là script Inno Setup 6 dự phòng cho việc đóng gói.
 
-Yêu cầu Rust toolchain target `x86_64-pc-windows-msvc` và Windows 10/11 SDK (`rc.exe`). File `.cargo/config.toml` đã bật sẵn `-C target-feature=+crt-static` để nhúng tĩnh VC++ Runtime.
+## Tự build
+
+Cần Rust target `x86_64-pc-windows-msvc` và Windows 10/11 SDK (`rc.exe`). `.cargo/config.toml` đã bật `-C target-feature=+crt-static` để nhúng tĩnh VC++ Runtime.
 
 ```powershell
-# Chạy toàn bộ unit test
+# Chạy toàn bộ test
 cargo test --workspace
 
-# Build file chạy portable
+# Build bản portable
 cargo build --release -p puwvga-ui
 
 # Build trình cài đặt (sau khi đã build puwvga-ui)
@@ -99,4 +98,4 @@ cargo build --release -p puwvga-installer
 
 ## Giấy phép
 
-Dự án phát hành theo giấy phép [Apache License 2.0](LICENSE).
+[Apache License 2.0](LICENSE).
