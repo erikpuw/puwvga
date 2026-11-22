@@ -11,7 +11,7 @@
   Written in Rust, ~2.3 MB installer, no WebView, nothing left running in the background, no Visual C++ Redistributable needed.
 </p>
 
-<p align="center"><a href="README.md">Tiếng Việt</a> · <b>English</b> · <a href="docs/releases/v1.0.4.md">Latest release: v1.0.4</a></p>
+<p align="center"><a href="README.md">Tiếng Việt</a> · <b>English</b> · <a href="https://github.com/erikpuw/puwvga/releases">Latest release: v1.0.4</a></p>
 
 > I got tired of every GPU vendor having its own control panel, so the idea was to bring all the settings into one place.
 >

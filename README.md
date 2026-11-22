@@ -11,7 +11,7 @@
   Viết bằng Rust, bộ cài ~2,3 MB, không WebView, không chạy nền, không cần cài Visual C++ Redistributable.
 </p>
 
-<p align="center"><b>Tiếng Việt</b> · <a href="README.en.md">English</a> · <a href="docs/releases/v1.0.4.md">Bản mới nhất: v1.0.4</a></p>
+<p align="center"><b>Tiếng Việt</b> · <a href="README.en.md">English</a> · <a href="https://github.com/erikpuw/puwvga/releases">Bản mới nhất: v1.0.4</a></p>
 
 > Tôi mệt mỏi với các điều khiển VGA của từng hãng, nên ý tưởng xuất phát các điều chỉnh về một nơi.
 >

@@ -16,10 +16,11 @@
 puwvga.presets.json
 *.log
 
-# Internal design & planning scratch files
+# Internal design, planning & local release notes
 /design-system
 /docs/superpowers
 /docs/mockups
+/docs/releases
 
 # Editor & OS junk
 .vscode/
